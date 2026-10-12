@@ -1,0 +1,36 @@
+# GitHub 上的正式运行：手动点“Run workflow”，选一个测试或全部。每个测试单独跑、单独写一行。
+name: VT 版本协议测试
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: '测试编号（如 VT01），填 all 跑全部'
+        required: true
+        default: VT01
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      cases: ${{ steps.p.outputs.cases }}
+    steps:
+      - id: p
+        run: |
+          if [ "${{ inputs.case }}" = "all" ]; then echo 'cases=["VT01","VT02","VT03","VT04","VT05","VT06","VT07","VT08","VT09","VT10","VT11","VT12","VT13","VT14","VT15","VT16","VT17","VT18","VT19","VT20","VT21"]' >> $GITHUB_OUTPUT
+          else echo "cases=[\"${{ inputs.case }}\"]" >> $GITHUB_OUTPUT; fi
+  test:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case: ${{ fromJson(needs.plan.outputs.cases) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 运行 ${{ matrix.case }}
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node vt/run-vt.mjs --case ${{ matrix.case }} --record
