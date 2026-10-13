@@ -103,6 +103,7 @@ if (args.record && !args.fake) {
     '执行器版本': { rich_text: [{ text: { content: `${EXECUTOR_VERSION}｜${codeHash.slice(0, 16)}${process.env.GITHUB_SHA ? '｜' + process.env.GITHUB_SHA.slice(0, 7) : ''}` } }] },
     '存在问题': { rich_text: [{ text: { content: fail.slice(0, 1900) } }] },
     '测试文档': { url: 'https://www.' + 'notion.so/' + docId },
+    '原始样本': { url: 'https://www.' + 'notion.so/' + s.id },
     ...(process.env.RUN_URL ? { '输出结果': { url: process.env.RUN_URL } } : {}),
   }
   if (first) await api('PATCH', `/pages/${first.id}`, { properties: props })
