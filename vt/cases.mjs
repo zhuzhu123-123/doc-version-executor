@@ -1,17 +1,18 @@
 // 21 个测试：普通修改请求 + 要制造的事故 + 判定类型。内容照测试总表。
-// 普通修改由固定代码完成，保证每次改得一样。
+// 普通修改由固定代码完成，按“正文第几段”定位，不依赖样本原话。
+// 版本号不写死：撞号时改成“最近成立的版本号”，判定按“加一”现算。
 
 export const EDITS = {
-  A: { find: '这就是风险溢价。', add: '风险溢价是长期平均意义上的补偿，任何一年都可能不出现。', note: '第三章补充风险溢价不是每年都有的提醒。' },
-  B: { find: '看 IRR 更严谨。', add: 'IRR 把每一笔投入的时间都算进去，比总收益率更接近真实回报。', note: '第八章补充 IRR 为什么更严谨。' },
-  C: { find: '理财很容易变成情绪决定。', add: '建议把五个问题的答案写下来，每年重新看一次。', note: '第一章补充把五个问题的答案写下来的建议。' },
+  A: { para: 3, add: '这一点长期来看成立，但任何一年都可能不出现。', note: '在正文第3段补充一句长期和短期的区别。' },
+  B: { para: 8, add: '判断时要把时间长短一起算进去。', note: '在正文第8段补充一句要考虑时间的提醒。' },
+  C: { para: 1, add: '建议把这些想法写下来，每年重新看一次。', note: '在正文第1段补充把想法写下来的建议。' },
 }
 
 // expect：ok = 应当版本成立；exception = 应当写异常行；noTable = 不写表，只输出结果
 export const CASES = {
-  VT01: { edit: "A", faults: [{kind: "dupVersion", to: "第 2 版", times: 1}], expect: "ok" },
-  VT02: { edit: "B", faults: [{kind: "dupVersion", to: "第 2 版", times: 1}], expect: "ok" },
-  VT03: { edit: "C", faults: [{kind: "dupVersion", to: "第 2 版", times: 3}], expect: "exception", words: ["版本号重复","已尝试3次"], copyLink: "copy", noDupRow: true },
+  VT01: { edit: "A", faults: [{kind: "dupVersion", times: 1}], expect: "ok" },
+  VT02: { edit: "B", faults: [{kind: "dupVersion", times: 1}], expect: "ok" },
+  VT03: { edit: "C", faults: [{kind: "dupVersion", times: 3}], expect: "exception", words: ["版本号重复","已尝试3次"], copyLink: "copy", noDupRow: true },
   VT04: { edit: "A", faults: [{kind: "prevNoteBlank", times: 1}], expect: "ok" },
   VT05: { edit: "B", faults: [{kind: "newNoteFilled", times: 1}], expect: "ok" },
   VT06: { edit: "C", note: "", faults: [], expect: "exception", words: ["缺少本次操作说明"], copyLink: "none", noCopy: true },
@@ -26,7 +27,7 @@ export const CASES = {
   VT15: { edit: "A", faults: [{kind: "noPermission"}], expect: "noRetry" },
   VT16: { edit: "B", faults: [{kind: "copyUnverifiable"}], expect: "exception", words: ["无法核对"] },
   VT17: { edit: "C", faults: [], expect: "noTable" },
-  VT18: { edit: "B", faults: [{kind: "dupVersion", to: "第 2 版", times: 1},{kind: "copyDropPara", times: 1},{kind: "copyReadError", times: 1}], expect: "ok" },
+  VT18: { edit: "B", faults: [{kind: "dupVersion", times: 1},{kind: "copyDropPara", times: 1},{kind: "copyReadError", times: 1}], expect: "ok" },
   VT19: { edit: "C", faults: [{kind: "editRow1", times: 1}], expect: "ok" },
   VT20: { edit: "B", faults: [{kind: "archiveUnavailable"}], expect: "exception", noCopyElsewhere: true },
   VT21: { edit: "C", faults: [{kind: "copyAltLink", times: 1}], expect: "ok", logHas: ["[写入并比对副本] 第1次 成功"] },

@@ -8,6 +8,7 @@ import { run, notionIo, EXECUTOR_VERSION } from '../executor.mjs'
 import { makeFaultyFetch } from './faults.mjs'
 import { judge } from './judge.mjs'
 import { CASES, EDITS } from './cases.mjs'
+import { editPara } from './body.mjs'
 
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => a.startsWith('--') ? [a.slice(2), all[i + 1] && !all[i + 1].startsWith('--') ? all[i + 1] : true] : null).filter(Boolean))
 const S = JSON.parse(readFileSync(new URL('./samples.json', import.meta.url)))
@@ -39,8 +40,11 @@ function fakeNotion(pages) {
 const E = EDITS[c.edit], note = c.note ?? E.note
 const orig = await api('GET', `/pages/${s.id}/markdown`)
 let before = orig.markdown
-if (!before.includes(E.find)) throw new Error('普通修改定位失败')
-before = before.replace(E.find, E.find + E.add)
+// 试跑可以把样本换一种表：--shift K 把所有版本号加 K；--exrow 在最后加一行“异常”；--empty 去掉所有版本行
+if (args.fake && args.shift) before = before.replace(/<td>第\s*(\d+)\s*版<\/td>/g, (x, n) => `<td>第 ${Number(n) + Number(args.shift)} 版</td>`)
+if (args.fake && args.exrow) before = before.replace('</table>', '<tr>\n<td>异常</td>\n<td>2026/10/01 10:00</td>\n<td>测试</td>\n<td>上次写入失败</td>\n<td>版本管理表</td>\n<td></td>\n<td>无</td>\n</tr>\n</table>')
+if (args.fake && args.empty) { const a = before.indexOf('<table'), b = before.indexOf('</table>'); const rows = before.slice(a, b).match(/<tr>[\s\S]*?<\/tr>/g); before = before.slice(0, a) + before.slice(a, b).replace(/<tr>[\s\S]*?<\/tr>\s*/g, (r) => r.startsWith(rows[0]) ? r : '') + before.slice(b) }
+before = editPara(before, E.para, (l) => l + E.add)
 let base = realFetch
 if (args.fake) {
   const pages = { [s.id]: { title: s.title, md: before, parent: 'home' }, [S.archive]: { title: '存档', md: '', parent: 'home' } }

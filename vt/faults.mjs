@@ -2,6 +2,7 @@
 // 执行器代码不引用本文件，也不知道它存在。
 
 const ID32 = /[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+import { editPara, paraLines } from './body.mjs'
 const clean = (s) => s.replace(/-/g, '')
 const resp = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } })
 const netErr = (why) => { const e = new TypeError('fetch failed'); e.cause = why; return e }
@@ -24,8 +25,16 @@ const isExceptionWrite = (md) => { const rs = rowsOf(md); return rs.length && ce
 
 // 副本漏掉好几段：版本管理表后面的正文里，删掉第5、10、15、20个非空行
 const dropMany = (md) => { const e = md.indexOf('</table>'); const head = md.slice(0, e), lines = md.slice(e).split('\n'); let n = 0; return head + lines.filter((l, i) => i === 0 || !l.trim() || ![5, 10, 15, 20].includes(++n)).join('\n') }
-// 副本写错一个地方：正文里第一处“6.67”改成“6.76”
-const typo = (md) => { const e = md.indexOf('</table>'); return md.slice(0, e) + md.slice(e).replace('6.67', '6.76') }
+// 副本写错一个地方：正文里第一个带数字的段落，把第一个数字改掉一位（d → d+1，9 → 0）
+function typo(md) {
+  const lines = md.split('\n')
+  for (const i of paraLines(md)) { const l = lines[i]; if (!l.includes('<') && !l.includes('](') && /\d/.test(l)) { lines[i] = l.replace(/\d/, (d) => String((Number(d) + 1) % 10)); return lines.join('\n') } }
+  throw new Error('正文里没有数字')
+}
+// 副本漏掉一段：正文第4段
+const dropPara = (md) => editPara(md, 4, () => null)
+// 最近成立的版本号（不含正在写的最后一行）
+const latest = (rs) => Math.max(0, ...rs.slice(0, -1).map((c) => { const m = (c[0] || '').match(/^第\s*(\d+)\s*版$/); return m ? Number(m[1]) : 0 }))
 
 /**
  * plan：本测试要制造的事故列表，每项 { kind, times?, ... }
@@ -73,7 +82,7 @@ export function makeFaultyFetch(plan, ctx, base) {
       if ((ver || exc) && has('noPermission')) { log.push('写版本管理表：返回 403 没有权限'); return resp(403, { object: 'error', status: 403, code: 'restricted_resource', message: 'Insufficient permissions' }) }
       if (ver) {
         let f
-        if ((f = take('dupVersion'))) { md = editRows(md, (rs) => { rs.at(-1)[0] = f.to; return rs }); log.push(`版本行编号改写成“${f.to}”`) }
+        if ((f = take('dupVersion'))) { let to; md = editRows(md, (rs) => { to = `第 ${latest(rs)} 版`; rs.at(-1)[0] = to; return rs }); log.push(`版本行编号改写成和最近成立版本同号的“${to}”`) }
         if ((f = take('prevNoteBlank'))) { md = editRows(md, (rs) => { rs[rs.length - 2][5] = ''; return rs }); log.push('上一版的“下一版操作说明”写成空') }
         if ((f = take('newNoteFilled'))) { md = editRows(md, (rs) => { rs.at(-1)[5] = rs.at(-1)[3]; return rs }); log.push('新一行的“下一版操作说明”填上了内容') }
         if ((f = take('editRow1'))) { md = editRows(md, (rs) => { rs[1][3] = rs[1][3] + '并校对了全文术语。'; return rs }); log.push('顺带改动了第1版那一行的操作说明') }
@@ -82,9 +91,9 @@ export function makeFaultyFetch(plan, ctx, base) {
         const r = await send()
         if (r.ok && take('changeDocAfterRow')) {
           const cur = JSON.parse(await (await base(`https://api.notion.com/v1/pages/${ctx.doc}/markdown`, { method: 'GET', headers: init.headers })).text()).markdown
-          const changed = cur.replace('这就是风险溢价。', '这就是风险溢价，也是股票长期收益的来源。')
+          const changed = editPara(cur, 2, (l) => l + '有人补充：这一点很重要。')
           await base(`https://api.notion.com/v1/pages/${ctx.doc}/markdown`, { method: 'PATCH', headers: init.headers, body: JSON.stringify({ type: 'replace_content', replace_content: { new_str: changed } }) })
-          stats.docChangedByOthers = true; log.push('版本行写完后，模拟有人改了第三章一句话')
+          stats.docChangedByOthers = true; log.push('版本行写完后，模拟有人在正文第2段补了一句话')
         }
         return r
       }
@@ -95,11 +104,11 @@ export function makeFaultyFetch(plan, ctx, base) {
     if (method === 'PATCH' && isCopy && isMd) {
       let md = body.replace_content.new_str
       if (md.trim()) {
-        if (take('copyDropPara')) { md = md.replace(/^由此可以推出几件事：\n/m, ''); log.push('副本漏掉一段（第三章“由此可以推出几件事”）') }
+        if (take('copyDropPara')) { md = dropPara(md); log.push('副本漏掉一段（正文第4段）') }
         else if (take('copySwapLink')) { md = md.replace(/(<mention-page url="[^"]*?)([0-9a-f]{32})/, (x, a) => a + ctx.otherPage); log.push('副本里第一个页面链接换成了另一个页面') }
         else if (take('copyDropMany')) { md = dropMany(md); log.push('副本漏掉好几段（正文里的第5、10、15、20段）') }
-        else if (take('copyTypo')) { md = typo(md); log.push('副本里第五章的“6.67”改成了“6.76”') }
-        else if (take('copyMixed')) { md = md.replace(/^由此可以推出几件事：\n/m, ''); md = typo(md); md = md.replace(/(<mention-page url="[^"]*?)([0-9a-f]{32})/, (x, a) => a + ctx.otherPage); log.push('副本同时漏掉一段、改了一个数字、换了一个页面链接') }
+        else if (take('copyTypo')) { md = typo(md); log.push('副本里第一个带数字的段落改错了一位数字') }
+        else if (take('copyMixed')) { md = dropPara(md); md = typo(md); md = md.replace(/(<mention-page url="[^"]*?)([0-9a-f]{32})/, (x, a) => a + ctx.otherPage); log.push('副本同时漏掉一段、改了一个数字、换了一个页面链接') }
         body = { ...body, replace_content: { new_str: md } }
       }
       return send()
