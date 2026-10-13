@@ -40,12 +40,15 @@ function fakeNotion(pages) {
 // ---------- 1. 普通修改 ----------
 const E = EDITS[c.edit], note = c.note ?? E.note
 // 测试编号：正式运行时从测试总表算出本次是第几次
-const DS = 'df0cf2ac398a4071a82d6ebf2112daa5' // 测试总表数据源
+const DS = S.tables.at(-1) // 最新一张测试总表；编号按全部测试总表一起算
 let runNo = vt + '-试跑', first = null
 if (args.record && !args.fake) {
-  const q = await api('POST', `/data_sources/${DS}/query`, { filter: { property: '测试编号', title: { starts_with: vt + '-' } } })
+  const all = []
+  for (const t of S.tables) all.push(...(await api('POST', `/data_sources/${t}/query`, { filter: { property: '测试编号', title: { starts_with: vt + '-' } } })).results)
+  const q = { results: all }
+  const latest = (await api('POST', `/data_sources/${DS}/query`, { filter: { property: '测试编号', title: { starts_with: vt + '-' } } })).results
   const nums = q.results.map((p) => Number(p.properties['测试编号'].title[0].plain_text.split('-')[1]))
-  first = q.results.find((p) => p.properties['结果'].select?.name === '未跑')
+  first = latest.find((p) => p.properties['结果'].select?.name === '未跑')
   runNo = first ? first.properties['测试编号'].title[0].plain_text : `${vt}-${String(Math.max(0, ...nums) + 1).padStart(2, '0')}`
 }
 const title = `${runNo}｜${s.title}`
@@ -107,6 +110,12 @@ if (args.record && !args.fake) {
     ...(process.env.RUN_URL ? { '输出结果': { url: process.env.RUN_URL } } : {}),
   }
   if (first) await api('PATCH', `/pages/${first.id}`, { properties: props })
-  else await api('POST', '/pages', { parent: { data_source_id: DS }, properties: { '测试编号': { title: [{ text: { content: runNo } }] }, ...props } })
+  else {
+    // 没有“未跑”行时新增一行：测试错误、测试什么、正确结果、协议从最早写有内容的那一行原样抄过来
+    const src = q.results.filter((p) => p.properties['测试错误']?.rich_text?.length).sort((a, b) => Number(a.properties['测试编号'].title[0].plain_text.split('-')[1]) - Number(b.properties['测试编号'].title[0].plain_text.split('-')[1]))[0]
+    const info = {}
+    if (src) { for (const k of ['测试错误', '测试什么', '正确结果']) info[k] = { rich_text: src.properties[k].rich_text.map((x) => ({ text: { content: x.plain_text } })) }; if (src.properties['协议']?.select) info['协议'] = { select: { name: src.properties['协议'].select.name } } }
+    await api('POST', '/pages', { parent: { data_source_id: DS }, properties: { '测试编号': { title: [{ text: { content: runNo } }] }, ...info, ...props } })
+  }
 }
 process.exit(verdict.pass ? 0 : 1)

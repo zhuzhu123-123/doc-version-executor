@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const EXECUTOR_VERSION = 'v2'
+export const EXECUTOR_VERSION = 'v3'
 const COLS = ['版本', '当前版本操作时间', '当前版本操作人', '当前版本操作说明', '当前版本影响位置', '下一版操作说明', '文档副本存档链接']
 const MAX = 3
 
@@ -97,6 +97,14 @@ export function changedPlaces(prevMd, curMd) {
   for (const h of p.secs.keys()) if (!c.secs.has(h)) out.push('删除：' + h)
   out.push('版本管理表')
   return out.join('；')
+}
+
+// 读回并确认内容可以核对：读不到写明“读回”，读到的不是文字写明“无法核对”
+const readBack = async (io, id, what) => {
+  let md
+  try { md = await io.getMd(id) } catch (e) { if (e instanceof StopError) throw e; throw new Error(`${what}读回失败（${e.message}）`) }
+  if (typeof md !== 'string') throw new Error(`${what}无法核对（读回的内容不是文字）`)
+  return md
 }
 
 // ---------- 主流程 ----------
@@ -202,12 +210,15 @@ export async function run(input, io, logger = console.log) {
         }
       }
       st.recordWritten = true
-      const back = await io.getMd(doc)
+      const back = await readBack(io, doc, '版本记录')
       const t = parseTable(back)
       if (!t || t.rows.length !== expRows.length + 1) throw new Error(`行数不对（${t ? t.rows.length : 0}）`)
       for (let k = 0; k < expRows.length; k++) if (!rowsEqual(t.rows[k], expRows[k])) throw new Error(k === prevIdx ? '上一版那一行不符合要求' : `旧行（第${k}行）被改动`)
       const c = cellsOf(t.rows.at(-1))
-      if (c[0] !== `第 ${N} 版`) throw new Error(`新行编号为“${c[0]}”`)
+      if (c[0] !== `第 ${N} 版`) {
+        if (expRows.slice(1).some((r) => cellsOf(r)[0] === c[0])) throw new Error(`版本号重复（新行编号为“${c[0]}”，表里已有这一版）`)
+        throw new Error(`新行编号为“${c[0]}”`)
+      }
       if (canon(c[3]) !== canon(esc(note))) throw new Error('新行操作说明不对')
       if (c[5] !== '') throw new Error('新行下一版操作说明不为空')
       if (!c[6] || pid(c[6].match(/url="([^"]+)"|\(([^)]+)\)/)?.slice(1).find(Boolean) || '') !== st.copyId) throw new Error('新行副本链接不对')
@@ -223,7 +234,7 @@ export async function run(input, io, logger = console.log) {
       if (sha(await io.getMd(doc)) !== sha(md3)) throw new StopError('执行中文档发生变化')
       if (i > 1) await io.putMd(st.copyId, '') // 清空副本后完整重写
       await io.putMd(st.copyId, md3)
-      const back = await io.getMd(st.copyId)
+      const back = await readBack(io, st.copyId, '副本')
       hDoc = sha(md3); hCopy = sha(back)
       if (hDoc !== hCopy) throw new Error(`副本与文档不一致（${hDoc.slice(0, 8)} / ${hCopy.slice(0, 8)}）`)
       if (sha(await io.getMd(doc)) !== sha(md3)) throw new StopError('执行中文档发生变化')
