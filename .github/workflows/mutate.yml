@@ -1,0 +1,16 @@
+# 改坏执行器检查：手动点“Run workflow”。把执行器按固定方法改坏8份，每份跑全部测试，和事先写好的预测对照。
+# 只在假 Notion 上跑，不写测试总表，不改任何真实页面。结果看运行记录。
+name: 改坏执行器检查
+on:
+  workflow_dispatch:
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 跑改坏执行器检查
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: node vt/mutate.mjs
