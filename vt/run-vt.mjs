@@ -41,11 +41,11 @@ function fakeNotion(pages) {
 const E = EDITS[c.edit], note = c.note ?? E.note
 // 测试编号：正式运行时从测试总表算出本次是第几次
 const DS = S.tables.at(-1) // 最新一张测试总表；编号按全部测试总表一起算
-let runNo = vt + '-试跑', first = null
+let runNo = vt + '-试跑', first = null, q = { results: [] }
 if (args.record && !args.fake) {
   const all = []
   for (const t of S.tables) all.push(...(await api('POST', `/data_sources/${t}/query`, { filter: { property: '测试编号', title: { starts_with: vt + '-' } } })).results)
-  const q = { results: all }
+  q = { results: all }
   const latest = (await api('POST', `/data_sources/${DS}/query`, { filter: { property: '测试编号', title: { starts_with: vt + '-' } } })).results
   const nums = q.results.map((p) => Number(p.properties['测试编号'].title[0].plain_text.split('-')[1]))
   first = latest.find((p) => p.properties['结果'].select?.name === '未跑')
