@@ -27,7 +27,7 @@ export const CASES = {
   VT15: { edit: "A", faults: [{kind: "noPermission"}], expect: "noRetry" },
   VT16: { edit: "B", faults: [{kind: "copyUnverifiable"}], expect: "exception", words: ["无法核对"] },
   VT17: { edit: "C", faults: [], expect: "noTable" },
-  VT18: { edit: "B", faults: [{kind: "dupVersion", times: 1},{kind: "copyDropPara", times: 1},{kind: "copyReadError", times: 1}], expect: "ok" },
+  VT18: { edit: "B", faults: [{kind: "dupVersion", times: 1},{kind: "copyDropPara", times: 1},{kind: "copyReadError", skip: 1, times: 1}], expect: "ok", logHas: ["[写入并核对版本记录] 第1次 失败：版本号重复", "[写入并核对版本记录] 第2次 成功", "[写入并比对副本] 第1次 失败：副本与文档不一致", "[写入并比对副本] 第2次 失败：副本读回失败", "[写入并比对副本] 第3次 成功"] },
   VT19: { edit: "C", faults: [{kind: "editRow1", times: 1}], expect: "ok" },
   VT20: { edit: "B", faults: [{kind: "archiveUnavailable"}], expect: "exception", noCopyElsewhere: true },
   VT21: { edit: "C", faults: [{kind: "copyAltLink", times: 1}], expect: "ok", logHas: ["[写入并比对副本] 第1次 成功"] },

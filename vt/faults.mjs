@@ -43,7 +43,7 @@ const latest = (rs) => Math.max(0, ...rs.slice(0, -1).map((c) => { const m = (c[
  */
 export function makeFaultyFetch(plan, ctx, base) {
   const used = {}
-  const take = (kind) => { const f = plan.find((p) => p.kind === kind); if (!f) return null; used[kind] = (used[kind] || 0) + 1; if (f.times !== undefined && used[kind] > f.times) return null; return f }
+  const take = (kind) => { const f = plan.find((p) => p.kind === kind); if (!f) return null; used[kind] = (used[kind] || 0) + 1; const n = used[kind] - (f.skip || 0); if (n < 1) return null; if (f.times !== undefined && n > f.times) return null; return f }
   const has = (kind) => plan.some((p) => p.kind === kind)
   const log = (ctx.faultLog = [])
   const stats = (ctx.stats = { versionWrites: 0, exceptionWrites: 0, pagesCreated: [], createAttempts: 0, docChangedByOthers: false })
