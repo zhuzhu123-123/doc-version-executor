@@ -1,0 +1,33 @@
+# 正式运行：给一篇真实文档做版本管理。手动点“Run workflow”，把模型在对话里写好的四项复制进来。
+name: 正式运行：版本管理
+on:
+  workflow_dispatch:
+    inputs:
+      doc:
+        description: '文档编号（要做版本管理的文档）'
+        required: true
+      archive:
+        description: '存档页编号（副本放在这一页下面）'
+        required: true
+      note:
+        description: '本次操作说明'
+        required: true
+      who:
+        description: '操作人（人类 或 AI）'
+        required: true
+        default: AI
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 运行执行器
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DOC: ${{ inputs.doc }}
+          ARCHIVE: ${{ inputs.archive }}
+          NOTE: ${{ inputs.note }}
+          WHO: ${{ inputs.who }}
+        run: node executor.mjs --doc "$DOC" --archive "$ARCHIVE" --note "$NOTE" --who "$WHO"
