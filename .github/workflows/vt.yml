@@ -15,7 +15,7 @@ jobs:
     steps:
       - id: p
         run: |
-          if [ "${{ inputs.case }}" = "all" ]; then echo 'cases=["VT01","VT02","VT03","VT04","VT05","VT06","VT07","VT08","VT09","VT10","VT11","VT12","VT13","VT14","VT15","VT16","VT17","VT18","VT19","VT20","VT21"]' >> $GITHUB_OUTPUT
+          if [ "${{ inputs.case }}" = "all" ]; then echo 'cases=["VT01","VT02","VT03","VT04","VT05","VT06","VT07","VT08","VT09","VT10","VT11","VT12","VT13","VT14","VT15","VT16","VT17","VT18","VT19","VT20","VT21","VT22","VT23"]' >> $GITHUB_OUTPUT
           else echo "cases=[\"${{ inputs.case }}\"]" >> $GITHUB_OUTPUT; fi
   test:
     needs: plan
