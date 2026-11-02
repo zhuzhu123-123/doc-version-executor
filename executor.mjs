@@ -1,4 +1,4 @@
-// 版本管理执行器 v2（比对时忽略评论编号）
+// 版本管理执行器 v4（开始前检查子页面；页面编号取链接最后 32 位）
 // 依据：《AI 与人类协作文档版本管理：执行协议》第22版
 // 用法：NOTION_TOKEN=... node executor.mjs --doc <文档ID> --archive <存档页ID> --note "本次操作说明" --who "操作人"
 // 结果：退出码 0 = 版本成立；1 = 版本管理失败
@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const EXECUTOR_VERSION = 'v3'
+export const EXECUTOR_VERSION = 'v4'
 const COLS = ['版本', '当前版本操作时间', '当前版本操作人', '当前版本操作说明', '当前版本影响位置', '下一版操作说明', '文档副本存档链接']
 const MAX = 3
 
@@ -54,7 +54,8 @@ export function notionIo(token) {
 }
 
 // ---------- 工具函数 ----------
-const pid = (u) => ((u.match(/[0-9a-f]{32}|[0-9a-f-]{36}/g) || [u]).pop()).replace(/-/g, '')
+// 读页面编号：编号永远在链接最后。三步：去掉 ? 和 # 后面的内容（以及末尾的斜杠）；去掉横线；取最后 32 位。
+export const pid = (u) => { const path = u.split(/[?#]/)[0].replace(/\/+$/, ''); return path.replace(/-/g, '').slice(-32) }
 const norm = (s) => s.replace(/ discussion-urls="[^"]*"/g, '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => !/^<page url=/.test(l)).join('\n').trim()
 const links = (s) => s
   .replace(/<mention-page url="([^"]+)"\s*\/>/g, (m, u) => `[LINK:${pid(u)}]`)
@@ -158,6 +159,7 @@ export async function run(input, io, logger = console.log) {
     if (!t1 || !t1.rows.length) throw new StopError('找不到版本管理表')
     const header = cellsOf(t1.rows[0])
     if (header.join('|') !== COLS.join('|')) throw new StopError('找不到版本管理表（表头不是规定的七列）')
+    if (/^<page url=/m.test(md1)) throw new StopError('文档下面挂着子页面，副本无法与文档一致；请先把子页面移到存档页')
     st.md1 = md1; st.t1 = t1
     st.done.push('已读取版本管理表')
     if (noteMissing) { st.step = '第1步 核对输入'; return await fail('缺少本次操作说明') }
@@ -186,8 +188,8 @@ export async function run(input, io, logger = console.log) {
     let where = '全文'
     if (prevIdx > 0) {
       const prevLink = cellsOf(t1.rows[prevIdx])[6] || ''
-      const m = prevLink.match(/[0-9a-f]{32}|[0-9a-f-]{36}/g)
-      if (m) { try { where = changedPlaces(await io.getMd(m.pop().replace(/-/g, '')), md1) } catch { where = '全文' } }
+      const u = prevLink.match(/url="([^"]+)"|\(([^)]+)\)/)?.slice(1).find(Boolean)
+      if (u) { try { where = changedPlaces(await io.getMd(pid(u)), md1) } catch { where = '全文' } }
     }
 
     // 5. 写入版本记录

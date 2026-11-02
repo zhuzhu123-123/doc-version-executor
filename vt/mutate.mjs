@@ -1,4 +1,4 @@
-// 改坏执行器检查：把执行器复制8份，每份按下面固定的方法只改一处，
+// 改坏执行器检查：把执行器复制10份，每份按下面固定的方法只改一处，
 // 每份都把全部测试在假 Notion 上跑一遍，再和事先写好的预测逐个对照。
 // 不写测试总表，不改任何真实页面。用法：NOTION_TOKEN=... node vt/mutate.mjs
 import { readFileSync, writeFileSync, mkdtempSync, cpSync, mkdirSync } from 'node:fs'
@@ -13,7 +13,7 @@ const SRC = readFileSync(join(ROOT, 'executor.mjs'), 'utf8')
 // 每份改坏的执行器：改哪一处（原文 → 改成），以及事先预测会失败的测试
 const MUTANTS = [
   { name: '新版本号不加一', from: 'const N = prevN + 1', to: 'const N = prevN',
-    expect: ['VT01','VT02','VT03','VT04','VT05','VT07','VT08','VT09','VT10','VT12','VT14','VT18','VT19','VT21'] },
+    expect: ['VT01','VT02','VT03','VT04','VT05','VT07','VT08','VT09','VT10','VT12','VT14','VT18','VT19','VT21','VT22'] },
   { name: '不检查旧行有没有被改', from: 'for (let k = 0; k < expRows.length; k++) if (!rowsEqual(t.rows[k], expRows[k]))', to: 'for (let k = 0; k < expRows.length; k++) if (false)',
     expect: ['VT04','VT19'] },
   { name: '不比对副本和文档', from: 'if (hDoc !== hCopy) throw', to: 'if (false) throw',
@@ -21,13 +21,17 @@ const MUTANTS = [
   { name: '出错不重试', from: 'const MAX = 3', to: 'const MAX = 1',
     expect: ['VT01','VT02','VT03','VT04','VT05','VT07','VT08','VT09','VT10','VT11','VT12','VT13','VT18','VT19'] },
   { name: '不填上一版的下一版操作说明', from: '(i === prevIdx ? makeRow(cellsOf(r).map((c, k) => (k === 5 ? esc(note) : c))) : r)', to: '(r)',
-    expect: ['VT01','VT02','VT04','VT05','VT07','VT08','VT09','VT10','VT12','VT14','VT18','VT19','VT21'] },
+    expect: ['VT01','VT02','VT04','VT05','VT07','VT08','VT09','VT10','VT12','VT14','VT18','VT19','VT21','VT22'] },
   { name: '不检查新一行的版本号', from: 'if (c[0] !== `第 ${N} 版`) {', to: 'if (false) {',
     expect: ['VT01','VT02','VT03','VT18'] },
   { name: '不检查副本标题', from: 'if (got !== copyTitle) {', to: 'if (false) {',
     expect: ['VT10'] },
   { name: '出异常时旧行不恢复原样', from: 'withRows(st.md1, st.t1, [...st.t1.rows, ex])', to: 'withRows(st.md1, st.t1, [...st.t1.rows.slice(0, -1), ex])',
     expect: ['VT03','VT06','VT11','VT13','VT16','VT20'] },
+  { name: '不检查子页面', from: "if (/^<page url=/m.test(md1)) throw", to: "if (false) throw",
+    expect: ['VT23'] },
+  { name: '页面编号用旧的认法', from: "return path.replace(/-/g, '').slice(-32)", to: "return ((u.match(/[0-9a-f]{32}|[0-9a-f-]{36}/g) || [u]).pop()).replace(/-/g, '')",
+    expect: ['VT22'] },
 ]
 
 const cases = Object.keys(CASES)

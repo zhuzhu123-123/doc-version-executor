@@ -47,6 +47,12 @@ export function judge(r) {
     ok('没有新建表，文档一字未改', fp(r.after) === fp(r.before))
     ok('没有建副本页', r.stats.pagesCreated.length === 0)
     ok('执行结果写明版本管理表缺失', /版本管理表/.test(r.result.problem || ''), r.result.problem)
+  } else if (c.expect === 'stopBefore') {
+    ok('结果是版本管理失败', r.result.result === '版本管理失败')
+    ok('文档一字未改', r.after === r.before)
+    ok('没有写版本行，也没有写异常行', r.stats.versionWrites === 0 && r.stats.exceptionWrites === 0, `版本行${r.stats.versionWrites}次，异常行${r.stats.exceptionWrites}次`)
+    ok('没有建副本页', r.stats.pagesCreated.length === 0 && r.stats.createAttempts === 0)
+    for (const w of c.words || []) ok(`执行结果写明“${w}”`, (r.result.problem || '').includes(w), r.result.problem)
   } else if (c.expect === 'noRetry') {
     ok('结果是版本管理失败', r.result.result === '版本管理失败')
     ok('版本行只尝试写了1次（不重试）', r.stats.versionWrites === 1, `尝试${r.stats.versionWrites}次`)

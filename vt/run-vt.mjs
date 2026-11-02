@@ -60,15 +60,19 @@ if (args.fake && args.shift) before = before.replace(/<td>第\s*(\d+)\s*版<\/td
 if (args.fake && args.exrow) before = before.replace('</table>', '<tr>\n<td>异常</td>\n<td>2026/10/01 10:00</td>\n<td>测试</td>\n<td>上次写入失败</td>\n<td>版本管理表</td>\n<td></td>\n<td>无</td>\n</tr>\n</table>')
 if (args.fake && args.empty) { const a = before.indexOf('<table'), b = before.indexOf('</table>'); const rows = before.slice(a, b).match(/<tr>[\s\S]*?<\/tr>/g); before = before.slice(0, a) + before.slice(a, b).replace(/<tr>[\s\S]*?<\/tr>\s*/g, (r) => r.startsWith(rows[0]) ? r : '') + before.slice(b) }
 before = editPara(before, E.para, (l) => l + E.add)
+const childTitle = c.childPage ? ((before.match(/^<page url="[^"]*">([^<]*)<\/page>/m) || [])[1] || '附件：计算表') : null
+before = before.split('\n').filter((l) => !l.startsWith('<page url=')).join('\n') // 原始样本的子页面标签不复制
 let base = realFetch, docId
 if (args.fake) {
   docId = 'e'.repeat(32)
   const pages = { [S.runs]: { title: '测试文档', md: '', parent: 'home' }, [docId]: { title, md: before, parent: S.runs }, [S.archive]: { title: '存档', md: '', parent: 'home' } }
   for (const cp of s.copies) pages[cp] = { title: 'copy', md: (await api('GET', `/pages/${cp}/markdown`)).markdown, parent: S.archive }
+  if (c.childPage) { const cid = 'd'.repeat(32); pages[cid] = { title: childTitle, md: '', parent: docId }; pages[docId].md = before = before + '\n<page url="https://www.' + 'notion.so/' + cid + '">' + childTitle + '</page>' }
   base = fakeNotion(pages)
 } else {
   docId = (await api('POST', '/pages', { parent: { page_id: S.runs }, properties: { title: { title: [{ text: { content: title } }] } } })).id.replace(/-/g, '')
   await api('PATCH', `/pages/${docId}/markdown`, { type: 'replace_content', replace_content: { new_str: before } })
+  if (c.childPage) await api('POST', '/pages', { parent: { page_id: docId }, properties: { title: { title: [{ text: { content: childTitle } }] } } })
   before = (await api('GET', `/pages/${docId}/markdown`)).markdown
 }
 

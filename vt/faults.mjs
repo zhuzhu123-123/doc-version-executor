@@ -125,6 +125,12 @@ export function makeFaultyFetch(plan, ctx, base) {
         log.push('读回副本：第一个页面链接换成同一页面的另一种网址写法')
         return resp(200, j)
       }
+      if (r.ok && take('copyDatedLink')) {
+        const j = JSON.parse(await r.text())
+        j.markdown = j.markdown.replace(/(<mention-page url=")[^"]*?([0-9a-f]{32})"/, (x, a, id) => a + 'https://www.' + 'notion.so/记录-2026-08-09-' + id + '"')
+        log.push('读回副本：第一个页面链接换成同一页面的另一种网址写法，编号前面紧挨着日期“2026-08-09-”')
+        return resp(200, j)
+      }
       return r
     }
 

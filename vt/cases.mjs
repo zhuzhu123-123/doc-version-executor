@@ -1,4 +1,4 @@
-// 21 个测试：普通修改请求 + 要制造的事故 + 判定类型。内容照测试总表。
+// 23 个测试：普通修改请求 + 要制造的事故 + 判定类型。内容照测试总表。
 // 普通修改由固定代码完成，按“正文第几段”定位，不依赖样本原话。
 // 版本号不写死：撞号时改成“最近成立的版本号”，判定按“加一”现算。
 
@@ -8,7 +8,7 @@ export const EDITS = {
   C: { para: 1, add: '建议把这些想法写下来，每年重新看一次。', note: '在正文第1段补充把想法写下来的建议。' },
 }
 
-// expect：ok = 应当版本成立；exception = 应当写异常行；noTable = 不写表，只输出结果
+// expect：ok = 应当版本成立；exception = 应当写异常行；noTable = 不写表，只输出结果；stopBefore = 开始前停下，什么都不写
 export const CASES = {
   VT01: { edit: "A", faults: [{kind: "dupVersion", times: 1}], expect: "ok" },
   VT02: { edit: "B", faults: [{kind: "dupVersion", times: 1}], expect: "ok" },
@@ -31,4 +31,6 @@ export const CASES = {
   VT19: { edit: "C", faults: [{kind: "editRow1", times: 1}], expect: "ok" },
   VT20: { edit: "B", faults: [{kind: "archiveUnavailable"}], expect: "exception", noCopyElsewhere: true },
   VT21: { edit: "C", faults: [{kind: "copyAltLink", times: 1}], expect: "ok", logHas: ["[写入并比对副本] 第1次 成功"] },
+  VT22: { edit: "A", faults: [{kind: "copyDatedLink"}], expect: "ok", logHas: ["[写入并比对副本] 第1次 成功"] },
+  VT23: { edit: "B", faults: [], childPage: true, expect: "stopBefore", words: ["子页面"] },
 }
