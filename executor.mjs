@@ -1,4 +1,4 @@
-// 版本管理执行器 v4（开始前检查子页面；页面编号取链接最后 32 位）
+// 版本管理执行器 v5（章节更名、完整引言、例行时间排除）
 // 依据：《AI 与人类协作文档版本管理：执行协议》第22版
 // 用法：NOTION_TOKEN=... node executor.mjs --doc <文档ID> --archive <存档页ID> --note "本次操作说明" --who "操作人"
 // 结果：退出码 0 = 版本成立；1 = 版本管理失败
@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const EXECUTOR_VERSION = 'v4'
+export const EXECUTOR_VERSION = 'v5'
 const COLS = ['版本', '当前版本操作时间', '当前版本操作人', '当前版本操作说明', '当前版本影响位置', '下一版操作说明', '文档副本存档链接']
 const MAX = 3
 
@@ -78,26 +78,66 @@ const verNum = (r) => { const m = cellsOf(r)[0]?.match(/^第\s*(\d+)\s*版$/); r
 const rowsEqual = (a, b) => canon(a) === canon(b)
 const withRows = (md, t, rows) => md.slice(0, t.start) + md.slice(t.start, md.indexOf('>', t.start) + 1) + '\n' + rows.join('\n') + '\n' + md.slice(t.end)
 
-// 按二级标题比较上一版副本和当前文档，得出影响位置
-export function changedPlaces(prevMd, curMd) {
-  const split = (md) => {
-    const t = parseTable(md)
-    const top = t ? md.slice(0, t.start) : ''
-    const rest = t ? md.slice(t.end) : md
-    const secs = new Map()
-    for (const part of rest.split(/^(?=## )/m)) {
-      const h = part.match(/^## (.+)$/m)
-      if (h && part.startsWith('## ')) secs.set(h[1].trim(), canon(part))
-    }
-    return { top: canon(top.replace(/^## .*$/gm, '')), secs }
+// 例行时间只识别顶部明确标注的字段；仅替换时间值，不删除引言或整行。
+const TIME_FIELD = /((?:最后更新时间|最后更新|更新时间)(?:\*\*)?[：:]\s*(?:\*\*)?)\d{4}[年/.-]\d{1,2}[月/.-]\d{1,2}日?(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?/g
+const topTime = (md, value) => {
+  const end = md.search(/^## /m)
+  const n = end < 0 ? md.length : end
+  return md.slice(0, n).replace(TIME_FIELD, (_, label) => label + value) + md.slice(n)
+}
+export const refreshUpdatedTime = (md, value) => topTime(md, value)
+
+// 保留章节顺序和同名章节；代码围栏中的 ## 不作为标题。
+function sections(md) {
+  const t = parseTable(md)
+  let body = t ? md.slice(0, t.start) + md.slice(t.end + '</table>'.length) : md
+  body = body.replace(/^## 版本管理表\s*$/gm, '')
+  body = topTime(body, '[例行时间]')
+  const parts = []; let current = { heading: null, text: [] }, fence = null
+  for (const line of body.split('\n')) {
+    const f = line.match(/^\s*(`{3,}|~{3,})/)
+    if (f) { if (!fence) fence = f[1]; else if (f[1][0] === fence[0] && f[1].length >= fence.length) fence = null }
+    const h = !fence && !f ? line.match(/^## (.+)$/) : null
+    if (h) { parts.push(current); current = { heading: h[1].trim(), text: [] } }
+    else current.text.push(line)
   }
-  const p = split(prevMd), c = split(curMd)
-  const out = []
-  if (p.top !== c.top) out.push('顶部时间')
-  for (const [h, v] of c.secs) if (h !== '版本管理表' && p.secs.get(h) !== v) out.push(h)
-  for (const h of p.secs.keys()) if (!c.secs.has(h)) out.push('删除：' + h)
+  parts.push(current)
+  return parts.map(x => ({ heading: x.heading, body: canon(x.text.join('\n')) }))
+}
+
+export function changedPlaces(prevMd, curMd) {
+  const p = sections(prevMd), c = sections(curMd), out = []
+  if (p[0].body !== c[0].body) out.push('顶部引言')
+  const old = p.slice(1), now = c.slice(1), paired = new Map(), used = new Set()
+  // 同名章节优先一对一匹配，不用 Map 覆盖重名章节。
+  for (let j = 0; j < now.length; j++) {
+    const i = old.findIndex((x, k) => !used.has(k) && x.heading === now[j].heading)
+    if (i >= 0) { paired.set(j, i); used.add(i) }
+  }
+  // 只有正文唯一一致时，才判定纯更名；不凭位置或相似度猜测。
+  for (let j = 0; j < now.length; j++) if (!paired.has(j) && now[j].body) {
+    const candidates = old.map((x,i) => ({...x,i})).filter(x => !used.has(x.i) && x.body === now[j].body)
+    const newCount = now.filter((x,k) => !paired.has(k) && x.body === now[j].body).length
+    if (candidates.length === 1 && newCount === 1) {
+      const i = candidates[0].i; paired.set(j,i); used.add(i)
+      out.push('章节更名：' + old[i].heading + ' → ' + now[j].heading)
+    }
+  }
+  const unmatchedOld = old.filter((_,i) => !used.has(i))
+  const unmatchedNew = now.filter((_,j) => !paired.has(j))
+  for (let j = 0; j < now.length; j++) if (paired.has(j)) {
+    const i = paired.get(j)
+    if (old[i].body !== now[j].body) out.push(now[j].heading)
+  }
+  // 同时有无法对应的新旧章节时明确不确定，避免把更名硬说成删除和新增。
+  if (unmatchedOld.length && unmatchedNew.length) out.push('章节对应待核对：' + unmatchedOld.map(x=>x.heading).join('、') + ' → ' + unmatchedNew.map(x=>x.heading).join('、'))
+  else {
+    out.push(...unmatchedOld.map(x => '删除：' + x.heading))
+    out.push(...unmatchedNew.map(x => '新增：' + x.heading))
+  }
+  if (!unmatchedOld.length && !unmatchedNew.length && [...paired.keys()].sort((a,b)=>a-b).some((j,k,js) => k > 0 && paired.get(js[k-1]) > paired.get(j))) out.push('章节顺序')
   out.push('版本管理表')
-  return out.join('；')
+  return [...new Set(out)].join('；')
 }
 
 // 读回并确认内容可以核对：读不到写明“读回”，读到的不是文字写明“无法核对”
@@ -196,7 +236,9 @@ export async function run(input, io, logger = console.log) {
     st.step = '第5步 写入版本记录'
     const newRow = makeRow([`第 ${N} 版`, now, esc(who || '未填写'), esc(note), esc(where), '', `<mention-page url="https://www.notion.so/${st.copyId}"/>`])
     const expRows = t1.rows.map((r, i) => (i === prevIdx ? makeRow(cellsOf(r).map((c, k) => (k === 5 ? esc(note) : c))) : r))
-    const target = withRows(md1, t1, [...expRows, newRow])
+    const dated = refreshUpdatedTime(md1, now)
+    const datedTable = parseTable(dated)
+    const target = withRows(dated, datedTable, [...expRows, newRow])
     let md3
     await retry('写入并核对版本记录', async (i) => {
       const cur = await io.getMd(doc)
