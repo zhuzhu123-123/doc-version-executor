@@ -93,8 +93,8 @@ try { result = await run({ doc: docId, archive: S.archive, note, who: '测试运
 finally { globalThis.fetch = realFetch }
 
 // ---------- 3. 判定 ----------
-const read = async (id) => { const r = await base(`{{https://api.notion.com/v1/pages/${id}}}/markdown`, { headers: hdr }); return r.ok ? JSON.parse(await r.text()).markdown : null }
-const readTitle = async (id) => { const r = await base(`{{https://api.notion.com/v1/pages/${id}}}`, { headers: hdr }); if (!r.ok) return null; const p = JSON.parse(await r.text()); return Object.values(p.properties).find((x) => x.type === 'title').title.map((x) => x.plain_text).join('') }
+const read = async (id) => { const r = await base(`https://api.notion.com/v1/pages/${id}/markdown`, { headers: hdr }); return r.ok ? JSON.parse(await r.text()).markdown : null }
+const readTitle = async (id) => { const r = await base(`https://api.notion.com/v1/pages/${id}`, { headers: hdr }); if (!r.ok) return null; const p = JSON.parse(await r.text()); return Object.values(p.properties).find((x) => x.type === 'title').title.map((x) => x.plain_text).join('') }
 const after = await read(docId)
 const cid = ctx.copyId
 const copy = cid ? { id: cid, md: await read(cid), title: await readTitle(cid), parent: ctx.stats.pagesCreated.find((x) => x.id === cid)?.parent } : null
