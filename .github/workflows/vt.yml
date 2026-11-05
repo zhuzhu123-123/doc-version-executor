@@ -1,36 +1,39 @@
-# GitHub 上的正式运行：手动点“Run workflow”，选一个测试或全部。每个测试单独跑、单独写一行。
 name: VT 版本协议测试
+run-name: VT · ${{ inputs.case }} · ${{ github.ref_name }}
 on:
   workflow_dispatch:
     inputs:
       case:
-        description: '测试编号（如 VT01），填 all 跑全部'
+        description: 'VT01～VT23，或 all；将新建测试文档并写入 v5 测试总表'
         required: true
-        default: VT01
+        default: all
+permissions:
+  contents: read
+concurrency:
+  group: notion-version-writes
+  cancel-in-progress: false
 jobs:
-  plan:
-    runs-on: ubuntu-latest
-    outputs:
-      cases: ${{ steps.p.outputs.cases }}
-    steps:
-      - id: p
-        run: |
-          if [ "${{ inputs.case }}" = "all" ]; then echo 'cases=["VT01","VT02","VT03","VT04","VT05","VT06","VT07","VT08","VT09","VT10","VT11","VT12","VT13","VT14","VT15","VT16","VT17","VT18","VT19","VT20","VT21","VT22","VT23"]' >> $GITHUB_OUTPUT
-          else echo "cases=[\"${{ inputs.case }}\"]" >> $GITHUB_OUTPUT; fi
   test:
-    needs: plan
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        case: ${{ fromJson(needs.plan.outputs.cases) }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - name: 运行 ${{ matrix.case }}
+      - name: 核对交付清单与差异回归
+        run: |
+          node verify-release.mjs
+          node vt/diff-tests.mjs
+      - name: 运行选定测试并保存首轮结果
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node vt/run-vt.mjs --case ${{ matrix.case }} --record
+          SELECTED_CASE: ${{ inputs.case }}
+        run: node vt/batch.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vt-results
+          path: test-results/

@@ -1,0 +1,24 @@
+{
+  "version": "v5",
+  "files": {
+    ".github/workflows/mutate.yml": "cd056544eae345ae3ff5e75c64c1e6d6320db2a1205779a160c96db32aa0d017",
+    ".github/workflows/run.yml": "31a54877209de309817b19ddeb095acf2f4a4e2eaad7e6eb8a01736e5a8088c8",
+    ".github/workflows/vt.yml": "601d25a965eac4b6ad5f9697c5fea1b01c7be2d5ffe16f854224a7b10b40a02e",
+    "README.md": "015dc93a7e7108675ed823af922f717c4098c8415125e73f3c6b8ecee7c5c6e7",
+    "evidence/prediction.md": "63a1345d8d065ac41091bab8f3127fe026ee34ddd127754a757b974188a182a5",
+    "evidence/v4-first-failures.log": "b99885acf1c8b38d97628948be6e6bc5955378499e47915845cde37e175f2350",
+    "executor.mjs": "3552d0bb9d4ce2cb1a56d2a9c56c4e9c6c0512941f44c0492562a20e8d5e8a60",
+    "formal-run-inputs.md": "ee194b4a783f7800272ad8571a4d46eeadd7391c3d8bab59e418e010d465310e",
+    "verify-release.mjs": "39fd4019f03f554125b193777dc6a458270cca48d716e379992844f405d9e99a",
+    "vt/batch.mjs": "bc49fa4468e7d3d22b82c4967565f10ba8625bfb2330650afc13b0b9f66e6e16",
+    "vt/body.mjs": "d88d19975683786c41ebd886a400feef9048898b901ee42957542cb68c6a979d",
+    "vt/cases.mjs": "78f8c129163764c2ce743e9e60ffe62cd39b272a1f68dc415d517ad6ae64a192",
+    "vt/diff-tests.mjs": "7eae0ca05294e06d146eb8918597213341d3f55bb9a7ce9beac1fd2b34aac1b8",
+    "vt/faults.mjs": "eda7369bbf3f3852ba65e3f8d88a71ce413305b69bf8ffc2ea614329593cf59f",
+    "vt/judge.mjs": "b48e21e8ce8c6a7ee9e32edba0f32b8623166ebcd3932b8dfd69c68efeaecb07",
+    "vt/mutate.mjs": "a0bf313a846e8c192bf89b884628ec904220ae61180567441b50b17dac29de9c",
+    "vt/offline-fixture.json": "7218c1b48fa3e488b57273a9b665242addd8a80c4ef72e7d1f27c53feb504bfb",
+    "vt/run-vt.mjs": "55db2e3891b3e485ded583a0402b771247e63b5e5bb682161870a675061ac321",
+    "vt/samples.json": "5e9b5579619a0a662c293b7be25191a463c6b9b84d07ce3ff75d5865b2f776fc"
+  }
+}

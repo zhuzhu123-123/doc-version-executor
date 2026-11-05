@@ -1,15 +1,26 @@
-# GitHub 上的改坏执行器检查：手动点“Run workflow”。只在模拟的 Notion 上跑，不写测试总表，不改真实页面。
 name: 改坏执行器检查
 on:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   mutate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - name: 改坏执行器检查
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: node vt/mutate.mjs
+      - name: 核对交付清单
+        run: node verify-release.mjs
+      - name: 离线改坏检查（不接触真实 Notion）
+        run: |
+          set -o pipefail
+          node vt/mutate.mjs | tee mutation-result.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-result
+          path: mutation-result.log

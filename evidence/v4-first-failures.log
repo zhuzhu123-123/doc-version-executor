@@ -1,0 +1,76 @@
+DF01 失败 纯章节更名不是删增：Expected values to be strictly equal:
++ actual - expected
+
++ '新第一章；删除：第一章；版本管理表'
+- '章节更名：第一章 → 新第一章；版本管理表'
+
+DF02 失败 表前引言不漏检：Expected values to be strictly equal:
++ actual - expected
+
++ '顶部时间；版本管理表'
+- '顶部引言；版本管理表'
+     ^
+
+DF03 失败 表后到首章的引言不漏检：Expected values to be strictly equal:
++ actual - expected
+
++ '版本管理表'
+- '顶部引言；版本管理表'
+
+DF04 失败 例行时间不算实质变更：Expected values to be strictly equal:
++ actual - expected
+
++ '顶部时间；版本管理表'
+- '版本管理表'
+
+DF05 失败 时间同行的实质文字仍要比较：Expected values to be strictly equal:
++ actual - expected
+
++ '顶部时间；版本管理表'
+- '顶部引言；版本管理表'
+     ^
+
+DF06 失败 更名同时改正文不假定删增：The input did not match the regular expression /章节对应待核对：第一章 → 新第一章/. Input:
+
+'新第一章；删除：第一章；版本管理表'
+
+DF07 失败 真实新增章节：Expected values to be strictly equal:
++ actual - expected
+
++ '第三章；版本管理表'
+- '新增：第三章；版本管理表'
+
+DF08 通过 真实删除章节
+DF09 失败 重名章节不能被覆盖：Expected values to be strictly equal:
++ actual - expected
+
++ '版本管理表'
+- '第一章；版本管理表'
+
+DF10 失败 代码围栏中的标题不分章：Expected values to be strictly equal:
++ actual - expected
+
++ '不是章节；版本管理表'
+- '第二章；版本管理表'
+
+DF11 失败 章节重排须报告：Expected values to be strictly equal:
++ actual - expected
+
++ '版本管理表'
+- '章节顺序；版本管理表'
+
+DF12 失败 没有二级标题也覆盖全文：Expected values to be strictly equal:
++ actual - expected
+
++ '版本管理表'
+- '顶部引言；版本管理表'
+
+DF13 失败 顶部时间实际更新且保留同行文字：refreshUpdatedTime is not a function
+DF14 失败 业务日期不是例行时间：Expected values to be strictly equal:
++ actual - expected
+
++ '版本管理表'
+- '顶部引言；版本管理表'
+
+DF15 通过 正文无变化只列版本表
+差异回归：2/15
