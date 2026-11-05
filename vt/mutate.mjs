@@ -12,6 +12,10 @@ const SRC = readFileSync(join(ROOT, 'executor.mjs'), 'utf8')
 
 // 每份改坏的执行器：改哪一处（原文 → 改成），以及事先预测会失败的测试
 const MUTANTS = [
+  { name: '不识别纯更名', from: 'if (candidates.length === 1 && newCount === 1)', to: 'if (false)', expect: ['DF01'] },
+  { name: '漏掉顶部引言', from: 'if (p[0].body !== c[0].body)', to: 'if (false)', expect: ['DF02','DF03','DF05','DF12','DF14'] },
+  { name: '不排除例行时间', from: "body = topTime(body, '[例行时间]')", to: 'body = body', expect: ['DF04'] },
+  { name: '不更新顶部时间', from: 'topTime(md, value)\n', to: 'md\n', expect: ['DF13'] },
   { name: '新版本号不加一', from: 'const N = prevN + 1', to: 'const N = prevN',
     expect: ['VT01','VT02','VT03','VT04','VT05','VT07','VT08','VT09','VT10','VT12','VT14','VT18','VT19','VT21','VT22'] },
   { name: '不检查旧行有没有被改', from: 'for (let k = 0; k < expRows.length; k++) if (!rowsEqual(t.rows[k], expRows[k]))', to: 'for (let k = 0; k < expRows.length; k++) if (false)',
@@ -35,7 +39,7 @@ const MUTANTS = [
 ]
 
 const cases = Object.keys(CASES)
-const runOne = (dir, vt) => new Promise((res) => execFile('node', [join(dir, 'vt/run-vt.mjs'), '--case', vt, '--fake'], { env: process.env, maxBuffer: 1 << 26 }, (e, out = '', err = '') => {
+const runOne = (dir, vt) => new Promise((res) => execFile('node', [join(dir, 'vt/run-vt.mjs'), '--case', vt, '--fake', '--offline'], { env: process.env, maxBuffer: 1 << 26 }, (e, out = '', err = '') => {
   const m = (out + err).match(/判定：(通过|失败)/); res(m ? m[1] : '失败')
 }))
 async function runAll(code) {
@@ -43,7 +47,9 @@ async function runAll(code) {
   writeFileSync(join(dir, 'executor.mjs'), code); cpSync(join(ROOT, 'vt'), join(dir, 'vt'), { recursive: true })
   const failed = []
   for (const vt of cases) if ((await runOne(dir, vt)) !== '通过') failed.push(vt)
-  return failed
+  const diff = await new Promise(resolve => execFile('node', [join(dir,'vt/diff-tests.mjs')], { env: process.env, maxBuffer: 1 << 24 }, (e,out='',err='') => resolve(out+err)))
+  for (const m of diff.matchAll(/^(DF\d+) 失败/gm)) failed.push(m[1])
+  return failed.sort()
 }
 
 let allOk = true

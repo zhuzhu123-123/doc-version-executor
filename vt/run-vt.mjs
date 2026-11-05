@@ -40,6 +40,7 @@ function fakeNotion(pages) {
 // ---------- 1. 普通修改 ----------
 const E = EDITS[c.edit], note = c.note ?? E.note
 // 测试编号：正式运行时从测试总表算出本次是第几次
+S.tables.push('a6b529d6d74948e3a464f33a524787dc')
 const DS = S.tables.at(-1) // 最新一张测试总表；编号按全部测试总表一起算
 let runNo = vt + '-试跑', first = null, q = { results: [] }
 if (args.record && !args.fake) {
@@ -53,7 +54,10 @@ if (args.record && !args.fake) {
 }
 const title = `${runNo}｜${s.title}`
 // 原始样本只读不改；本次运行在新建的测试文档上进行
-const orig = await api('GET', `/pages/${s.id}/markdown`)
+const offline = args.offline && args.fake
+const fixture = offline ? JSON.parse(readFileSync(new URL('./offline-fixture.json', import.meta.url))) : null
+const orig = offline ? { markdown: vt === 'VT17' ? fixture.noTable : fixture.md, truncated: false } : await api('GET', `/pages/${s.id}/markdown`)
+if (orig.truncated || typeof orig.markdown !== 'string') throw new Error('原始样本不完整，停止测试')
 let before = orig.markdown
 // 试跑可以把样本换一种表：--shift K 把所有版本号加 K；--exrow 在最后加一行“异常”；--empty 去掉所有版本行
 if (args.fake && args.shift) before = before.replace(/<td>第\s*(\d+)\s*版<\/td>/g, (x, n) => `<td>第 ${Number(n) + Number(args.shift)} 版</td>`)
@@ -66,7 +70,7 @@ let base = realFetch, docId
 if (args.fake) {
   docId = 'e'.repeat(32)
   const pages = { [S.runs]: { title: '测试文档', md: '', parent: 'home' }, [docId]: { title, md: before, parent: S.runs }, [S.archive]: { title: '存档', md: '', parent: 'home' } }
-  for (const cp of s.copies) pages[cp] = { title: 'copy', md: (await api('GET', `/pages/${cp}/markdown`)).markdown, parent: S.archive }
+  for (const cp of s.copies) pages[cp] = { title: 'copy', md: (offline ? fixture.md : (await api('GET', `/pages/${cp}/markdown`)).markdown), parent: S.archive }
   if (c.childPage) { const cid = 'd'.repeat(32); pages[cid] = { title: childTitle, md: '', parent: docId }; pages[docId].md = before = before + '\n<page url="https://www.' + 'notion.so/' + cid + '">' + childTitle + '</page>' }
   base = fakeNotion(pages)
 } else {
@@ -89,8 +93,8 @@ try { result = await run({ doc: docId, archive: S.archive, note, who: '测试运
 finally { globalThis.fetch = realFetch }
 
 // ---------- 3. 判定 ----------
-const read = async (id) => { const r = await base(`https://api.notion.com/v1/pages/${id}/markdown`, { headers: hdr }); return r.ok ? JSON.parse(await r.text()).markdown : null }
-const readTitle = async (id) => { const r = await base(`https://api.notion.com/v1/pages/${id}`, { headers: hdr }); if (!r.ok) return null; const p = JSON.parse(await r.text()); return Object.values(p.properties).find((x) => x.type === 'title').title.map((x) => x.plain_text).join('') }
+const read = async (id) => { const r = await base(`{{https://api.notion.com/v1/pages/${id}}}/markdown`, { headers: hdr }); return r.ok ? JSON.parse(await r.text()).markdown : null }
+const readTitle = async (id) => { const r = await base(`{{https://api.notion.com/v1/pages/${id}}}`, { headers: hdr }); if (!r.ok) return null; const p = JSON.parse(await r.text()); return Object.values(p.properties).find((x) => x.type === 'title').title.map((x) => x.plain_text).join('') }
 const after = await read(docId)
 const cid = ctx.copyId
 const copy = cid ? { id: cid, md: await read(cid), title: await readTitle(cid), parent: ctx.stats.pagesCreated.find((x) => x.id === cid)?.parent } : null
