@@ -1,4 +1,4 @@
-// 版本管理执行器 v4（开始前检查子页面；页面编号取链接最后 32 位）
+// 版本管理执行器 v5（在v4上修复章节、引言与顶部时间；保留原运行流程）
 // 依据：《AI 与人类协作文档版本管理：执行协议》第22版
 // 用法：NOTION_TOKEN=... node executor.mjs --doc <文档ID> --archive <存档页ID> --note "本次操作说明" --who "操作人"
 // 结果：退出码 0 = 版本成立；1 = 版本管理失败
@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const EXECUTOR_VERSION = 'v4'
+export const EXECUTOR_VERSION = 'v5'
 const COLS = ['版本', '当前版本操作时间', '当前版本操作人', '当前版本操作说明', '当前版本影响位置', '下一版操作说明', '文档副本存档链接']
 const MAX = 3
 
@@ -78,24 +78,63 @@ const verNum = (r) => { const m = cellsOf(r)[0]?.match(/^第\s*(\d+)\s*版$/); r
 const rowsEqual = (a, b) => canon(a) === canon(b)
 const withRows = (md, t, rows) => md.slice(0, t.start) + md.slice(t.start, md.indexOf('>', t.start) + 1) + '\n' + rows.join('\n') + '\n' + md.slice(t.end)
 
-// 按二级标题比较上一版副本和当前文档，得出影响位置
+// 顶部例行时间：只认页面开头的时间字段，不屏蔽正文中的业务日期。
+const TOP_TIME = /^(\s*(?:(?:<[^>\n]+>|[*_])\s*)*(?:(?:更新时间|操作时间|修改时间|最后更新|最近更新|时间)\s*[:：]\s*)?)(20\d{2}[\/-]\d{1,2}[\/-]\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?)/
+const topTimeValue = (md) => { const t = parseTable(md); return (t ? md.slice(0, t.start) : md).match(TOP_TIME)?.[2] || null }
+export function refreshTopTime(md, now) {
+  const t = parseTable(md), n = t ? t.start : md.length
+  return md.slice(0, n).replace(TOP_TIME, (all, prefix) => prefix + now) + md.slice(n)
+}
+
+// 按二级标题比较上一版副本和当前文档，得出影响位置。
+// 只在正文完全相同且两边唯一时认定纯改名；不按相似度猜测。
 export function changedPlaces(prevMd, curMd) {
   const split = (md) => {
     const t = parseTable(md)
-    const top = t ? md.slice(0, t.start) : ''
-    const rest = t ? md.slice(t.end) : md
-    const secs = new Map()
-    for (const part of rest.split(/^(?=## )/m)) {
-      const h = part.match(/^## (.+)$/m)
-      if (h && part.startsWith('## ')) secs.set(h[1].trim(), canon(part))
+    const content = (t ? md.slice(0, t.start) + '\n' + md.slice(t.end + '</table>'.length) : md)
+      .replace(TOP_TIME, (all, prefix) => prefix + '[例行时间]')
+      .replace(/^##[ \t]+版本管理表[ \t]*$/gm, '')
+    const intro = [], secs = []
+    let current = null, fence = null
+    for (const line of content.split('\n')) {
+      const f = line.match(/^\s*(`{3,}|~{3,})/)
+      if (fence) {
+        if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null
+      } else if (f) fence = f[1]
+      else {
+        const h = line.match(/^##[ \t]+(.+?)[ \t]*$/)
+        if (h) { current = { title: h[1].trim(), lines: [] }; secs.push(current); continue }
+      }
+      ;(current ? current.lines : intro).push(line)
     }
-    return { top: canon(top.replace(/^## .*$/gm, '')), secs }
+    return { intro: canon(intro.join('\n')), secs: secs.map((x) => ({ title: x.title, body: canon(x.lines.join('\n')) })) }
   }
-  const p = split(prevMd), c = split(curMd)
-  const out = []
-  if (p.top !== c.top) out.push('顶部时间')
-  for (const [h, v] of c.secs) if (h !== '版本管理表' && p.secs.get(h) !== v) out.push(h)
-  for (const h of p.secs.keys()) if (!c.secs.has(h)) out.push('删除：' + h)
+  const p = split(prevMd), c = split(curMd), out = [], used = new Set(), pairs = []
+  if (p.intro !== c.intro) out.push('文档引言')
+  const label = (arr, i) => arr.filter((x) => x.title === arr[i].title).length > 1
+    ? `${arr[i].title}（第${arr.slice(0, i + 1).filter((x) => x.title === arr[i].title).length}处）` : arr[i].title
+  const missing = []
+  for (let i = 0; i < c.secs.length; i++) {
+    const cur = c.secs[i]
+    let j = p.secs.findIndex((old, k) => !used.has(k) && old.title === cur.title && old.body === cur.body)
+    if (j < 0) j = p.secs.findIndex((old, k) => !used.has(k) && old.title === cur.title)
+    if (j < 0) { missing.push(i); continue }
+    used.add(j); pairs.push([i, j])
+    if (p.secs[j].body !== cur.body) out.push(label(c.secs, i))
+  }
+  for (const i of missing) {
+    const cur = c.secs[i]
+    const matches = p.secs.map((old, j) => ({ old, j })).filter(({ old, j }) => !used.has(j) && old.body === cur.body)
+    const unique = cur.body && matches.length === 1
+      && p.secs.filter((x) => x.body === cur.body).length === 1 && c.secs.filter((x) => x.body === cur.body).length === 1
+    if (unique) {
+      const j = matches[0].j; used.add(j); pairs.push([i, j])
+      out.push(`章节改名：${p.secs[j].title} → ${cur.title}`)
+    } else out.push('新增：' + label(c.secs, i))
+  }
+  for (let j = 0; j < p.secs.length; j++) if (!used.has(j)) out.push('删除：' + label(p.secs, j))
+  const order = pairs.sort((a, b) => a[0] - b[0]).map((x) => x[1])
+  if (order.some((j, i) => i > 0 && j < order[i - 1])) out.push('章节顺序')
   out.push('版本管理表')
   return out.join('；')
 }
@@ -196,7 +235,7 @@ export async function run(input, io, logger = console.log) {
     st.step = '第5步 写入版本记录'
     const newRow = makeRow([`第 ${N} 版`, now, esc(who || '未填写'), esc(note), esc(where), '', `<mention-page url="https://www.notion.so/${st.copyId}"/>`])
     const expRows = t1.rows.map((r, i) => (i === prevIdx ? makeRow(cellsOf(r).map((c, k) => (k === 5 ? esc(note) : c))) : r))
-    const target = withRows(md1, t1, [...expRows, newRow])
+    const target = refreshTopTime(withRows(md1, t1, [...expRows, newRow]), now)
     let md3
     await retry('写入并核对版本记录', async (i) => {
       const cur = await io.getMd(doc)
@@ -225,6 +264,7 @@ export async function run(input, io, logger = console.log) {
       if (c[5] !== '') throw new Error('新行下一版操作说明不为空')
       if (!c[6] || pid(c[6].match(/url="([^"]+)"|\(([^)]+)\)/)?.slice(1).find(Boolean) || '') !== st.copyId) throw new Error('新行副本链接不对')
       if (!c[1] || !c[2] || !c[4]) throw new Error('新行有空格')
+      if (topTimeValue(back) !== topTimeValue(target)) throw new Error('顶部时间未按本次操作时间更新')
       md3 = back
     })
     st.done.push(`已写入第${N}版版本记录`)
