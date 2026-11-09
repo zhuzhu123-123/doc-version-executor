@@ -1,25 +1,48 @@
-# GitHub 上的正式运行：手动点“Run workflow”，选一个测试或全部。每个测试单独跑、单独写一行。
 name: VT 版本协议测试
+run-name: VT · ${{ inputs.case }} · ${{ github.ref_name }}
 on:
   workflow_dispatch:
     inputs:
       case:
-        description: '测试编号（如 VT01），填 all 跑全部'
+        description: 'VT01～VT39，或 all 跑全部；写入真实 Notion'
         required: true
         default: VT01
+permissions:
+  contents: read
+concurrency:
+  group: notion-version-writes
+  cancel-in-progress: false
 jobs:
   plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      cases: ${{ steps.p.outputs.cases }}
+      cases: ${{ steps.select.outputs.cases }}
     steps:
-      - id: p
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 离线前置检查（不写 Notion）
         run: |
-          if [ "${{ inputs.case }}" = "all" ]; then echo 'cases=["VT01","VT02","VT03","VT04","VT05","VT06","VT07","VT08","VT09","VT10","VT11","VT12","VT13","VT14","VT15","VT16","VT17","VT18","VT19","VT20","VT21","VT22","VT23"]' >> $GITHUB_OUTPUT
-          else echo "cases=[\"${{ inputs.case }}\"]" >> $GITHUB_OUTPUT; fi
+          node verify-release.mjs
+          node vt/change-tests.mjs
+      - id: select
+        env:
+          SELECTED_CASE: ${{ inputs.case }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs'
+          import { CASES } from './vt/all-cases.mjs'
+          const selected = process.env.SELECTED_CASE
+          if (selected !== 'all' && !CASES[selected]) throw new Error('无效测试编号；未启动真实测试')
+          const cases = selected === 'all' ? Object.keys(CASES) : [selected]
+          appendFileSync(process.env.GITHUB_OUTPUT, 'cases='+JSON.stringify(cases)+'\n')
+          NODE
   test:
+    name: ${{ matrix.case }}
     needs: plan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -33,4 +56,13 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node vt/run-vt.mjs --case ${{ matrix.case }} --record
+          CASE: ${{ matrix.case }}
+        run: |
+          set -o pipefail
+          mkdir -p test-results
+          node vt/run-vt.mjs --case "$CASE" --record | tee "test-results/$CASE.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vt-result-${{ matrix.case }}
+          path: test-results/
