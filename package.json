@@ -1,0 +1,14 @@
+{
+  "name": "doc-version-executor",
+  "version": "4.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check executor.mjs && node --check vt/run-vt.mjs && node --check vt/judge.mjs && node --check vt/faults.mjs",
+    "memory-check": "node vt/run-vt.mjs --case VT01 --fake",
+    "mutation-check": "node vt/mutate.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

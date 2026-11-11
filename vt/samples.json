@@ -1,10 +1,43 @@
 {
   "archive": "3f5e7c09ef1581a299a4d926683afd3e",
+  "runs": "3f8e7c09ef15818084a2d31b54b21535",
+  "tables": {
+    "v2": {
+      "id": "df0cf2ac398a4071a82d6ebf2112daa5",
+      "docColumn": "测试文档",
+      "runColumn": "输出结果"
+    },
+    "v3": {
+      "id": "4ba3ef0a38644e53b6c91d444fde5a4a",
+      "docColumn": "测试文档",
+      "runColumn": "输出结果"
+    },
+    "v4": {
+      "id": "15147d9e478844f89fdebc80b6ec9cf1",
+      "docColumn": "测试文档",
+      "runColumn": "输出结果"
+    },
+    "v5": {
+      "id": "a6b529d6d74948e3a464f33a524787dc",
+      "docColumn": "最新输出notion文档",
+      "runColumn": "github输出结果"
+    },
+    "v4.1": {
+      "id": "28c155f109af48189db4b7ed57272cea",
+      "docColumn": "最新输出notion文档",
+      "runColumn": "github输出结果"
+    }
+  },
+  "historyTables": [
+    "df0cf2ac398a4071a82d6ebf2112daa5",
+    "4ba3ef0a38644e53b6c91d444fde5a4a",
+    "15147d9e478844f89fdebc80b6ec9cf1",
+    "a6b529d6d74948e3a464f33a524787dc",
+    "28c155f109af48189db4b7ed57272cea"
+  ],
   "VT01": {
     "id": "3f5e7c09ef15813eb6a6eb833ed422e9",
     "title": "个人理财入门：从应急金到定投纪律｜K7Q2",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581068f89c4f5d861b75f",
       "3f5e7c09ef15811583f9d6962f080bbf"
@@ -13,8 +46,6 @@
   "VT02": {
     "id": "3f5e7c09ef15811b8737cd3141bb720c",
     "title": "个人理财入门：从应急金到定投纪律｜M3RD",
-    "truncated": false,
-    "len": 4325,
     "copies": [
       "3f5e7c09ef1581d1b823f5a5bbba80b7",
       "3f5e7c09ef15817abfbce95a097daa4b"
@@ -23,8 +54,6 @@
   "VT03": {
     "id": "3f5e7c09ef158176a05ff6d812bf89ca",
     "title": "个人理财入门：从应急金到定投纪律｜T9WA",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581ab9b2dd8c4ee78f653",
       "3f5e7c09ef15815e84a4eda5391a2f6e"
@@ -33,8 +62,6 @@
   "VT04": {
     "id": "3f5e7c09ef1581558deffce761ac9804",
     "title": "个人理财入门：从应急金到定投纪律｜B4XN",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158175b6e7ded4d89165d6",
       "3f5e7c09ef1581769103ffe145a4f789"
@@ -43,8 +70,6 @@
   "VT05": {
     "id": "3f5e7c09ef1581f8972ac6e102a54d6a",
     "title": "个人理财入门：从应急金到定投纪律｜H6PL",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581fe927ae3b099cedd84",
       "3f5e7c09ef1581318f1fd43cde361ad2"
@@ -53,8 +78,6 @@
   "VT06": {
     "id": "3f5e7c09ef15815eb212e51ea8de4dda",
     "title": "个人理财入门：从应急金到定投纪律｜Z2FC",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158195af51d3b3a70db608",
       "3f5e7c09ef158195bb68ea989c416e26"
@@ -63,19 +86,14 @@
   "VT07": {
     "id": "3f5e7c09ef1581e89ec7c42f1470cb9d",
     "title": "个人理财入门：从应急金到定投纪律｜R8JE",
-    "truncated": false,
-    "len": 82968,
     "copies": [
       "3f5e7c09ef1581acb8bbc554c8d00c0d",
       "3f5e7c09ef1581abb194ecc58408477c"
-    ],
-    "qa": 850
+    ]
   },
   "VT08": {
     "id": "3f6e7c09ef1581039c79da977a2c72cf",
     "title": "个人理财入门：从应急金到定投纪律｜U2HB",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f6e7c09ef158160996ee80c03a2d246",
       "3f6e7c09ef158155a288c29e6feae325"
@@ -84,8 +102,6 @@
   "VT09": {
     "id": "3f6e7c09ef1581fd8793ebec02abe921",
     "title": "个人理财入门：从应急金到定投纪律｜Y7KC",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f6e7c09ef1581c9826ac810809382f5",
       "3f6e7c09ef1581dc8adec862f9dc7c4a"
@@ -94,8 +110,6 @@
   "VT10": {
     "id": "3f5e7c09ef1581bcbb76f8a5b6c34640",
     "title": "个人理财入门：从应急金到定投纪律｜W5UT",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581aaa97fd79b82368d28",
       "3f5e7c09ef15810e978cf57f6c923180"
@@ -104,8 +118,6 @@
   "VT11": {
     "id": "3f5e7c09ef1581289b84d78451220ea4",
     "title": "个人理财入门：从应急金到定投纪律｜D1GY",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158137a133ec429898beb8",
       "3f5e7c09ef1581c0aea4e859b87176ea"
@@ -114,8 +126,6 @@
   "VT12": {
     "id": "3f5e7c09ef1581468be2f8913af510ab",
     "title": "个人理财入门：从应急金到定投纪律｜P7SK",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158115807cda435b298427",
       "3f5e7c09ef158100b48cdeaf2eb600d4"
@@ -124,8 +134,6 @@
   "VT13": {
     "id": "3f5e7c09ef15818ea4cadb78821cb3bd",
     "title": "个人理财入门：从应急金到定投纪律｜F3VM",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581c9b99bd19eeb684f7b",
       "3f5e7c09ef1581ac9c56d50fb8c0929b"
@@ -134,8 +142,6 @@
   "VT14": {
     "id": "3f5e7c09ef15811b85f3c4032abbca71",
     "title": "个人理财入门：从应急金到定投纪律｜N6QB",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158168b96bd7a5d532640e",
       "3f5e7c09ef1581c6803bd0e1ff01f234"
@@ -144,8 +150,6 @@
   "VT15": {
     "id": "3f5e7c09ef15814a867ddd4b3fcfff40",
     "title": "个人理财入门：从应急金到定投纪律｜C9HL",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef15813094eee6d6fd761507",
       "3f5e7c09ef15818b9138f8c6e7a74d13"
@@ -154,8 +158,6 @@
   "VT16": {
     "id": "3f5e7c09ef158115b75fd86704e3b69f",
     "title": "个人理财入门：从应急金到定投纪律｜J2TX",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581fab377e5a73c373d5c",
       "3f5e7c09ef15811ab7ebc9690d339dbf"
@@ -164,18 +166,11 @@
   "VT17": {
     "id": "3f5e7c09ef158159abe3d9ed2f0336e3",
     "title": "个人理财入门：从应急金到定投纪律｜Q5WR",
-    "truncated": false,
-    "len": 3467,
-    "copies": [
-      "3f5e7c09ef158107ac1cf8a52a302db9",
-      "3f5e7c09ef15816d97b1e7c46437f766"
-    ]
+    "copies": []
   },
   "VT18": {
     "id": "3f5e7c09ef1581e1bb6efdc192c6e82a",
     "title": "个人理财入门：从应急金到定投纪律｜V4KP",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef1581ee895de07bf7e2276d",
       "3f5e7c09ef15815a82f6e750ced686d9"
@@ -184,8 +179,6 @@
   "VT19": {
     "id": "3f5e7c09ef1581119d10f68130b9b795",
     "title": "个人理财入门：从应急金到定投纪律｜X1EF",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158161af48ce91fc538188",
       "3f5e7c09ef158185b94ae0b796f88afd"
@@ -194,8 +187,6 @@
   "VT20": {
     "id": "3f5e7c09ef1581f3bccbf9dd16708e63",
     "title": "个人理财入门：从应急金到定投纪律｜S3MU",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef158113a6dbdd1b3e02fbbb",
       "3f5e7c09ef1581a4b231c94fa71563f4"
@@ -204,25 +195,14 @@
   "VT21": {
     "id": "3f5e7c09ef158140aeeac7d3aa920b37",
     "title": "个人理财入门：从应急金到定投纪律｜E9CJ",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "3f5e7c09ef15811a93d6eb73b8aea8dd",
       "3f5e7c09ef15817daadde783fcbd1447"
     ]
   },
-  "runs": "3f8e7c09ef15818084a2d31b54b21535",
-  "tables": [
-    "df0cf2ac398a4071a82d6ebf2112daa5",
-    "4ba3ef0a38644e53b6c91d444fde5a4a",
-    "15147d9e478844f89fdebc80b6ec9cf1",
-    "a6b529d6d74948e3a464f33a524787dc"
-  ],
   "VT22": {
     "id": "40ce7c09ef15812aa5f7f35c2ea5e919",
     "title": "个人理财入门：从应急金到定投纪律｜Y7HD",
-    "truncated": false,
-    "len": 4082,
     "copies": [
       "40ce7c09ef15813b8280faabb6f1ab52",
       "40ce7c09ef158175a89bf7c024cd40db"
@@ -231,11 +211,38 @@
   "VT23": {
     "id": "40ce7c09ef1581569665ffc12def27a2",
     "title": "个人理财入门：从应急金到定投纪律｜U2PB",
-    "truncated": false,
-    "len": 4170,
     "copies": [
       "40ce7c09ef1581a3a709dcbbc48b8a2c",
       "40ce7c09ef1581359e9fc14741d14f18"
     ]
+  },
+  "approvedExecutorHashes": {
+    "v4": "ef4c72ef5e1d2ec6b2a2c46ad43ddc18f8f55986c87d6a11a6db3cd4d219875e",
+    "v4.1": "27100838ba6b8872283de6a72296b9e4b4fc8fd01152d045b6783e63d5df12d9"
+  },
+  "runNumberFloor": {
+    "VT01": 12,
+    "VT09": 6,
+    "VT08": 6,
+    "VT21": 6,
+    "VT20": 6,
+    "VT19": 6,
+    "VT18": 7,
+    "VT17": 6,
+    "VT16": 6,
+    "VT15": 6,
+    "VT13": 6,
+    "VT14": 6,
+    "VT12": 6,
+    "VT11": 6,
+    "VT10": 6,
+    "VT07": 6,
+    "VT06": 6,
+    "VT02": 6,
+    "VT04": 6,
+    "VT05": 6,
+    "VT03": 6,
+    "VT23": 3,
+    "VT22": 3
   }
 }

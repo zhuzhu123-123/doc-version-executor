@@ -1,22 +1,23 @@
-// 按位置找正文段落：版本管理表后面、不以标题或标签开头的非空行。
-// 修改请求和制造错误都按“第几段”定位，不依赖样本里的具体原话，换样本也能用。
+// 只定位、修改普通正文；不理解测试答案。
 export function paraLines(md) {
-  const e = md.indexOf('</table>')
-  const start = e < 0 ? 0 : md.indexOf('\n', e) + 1
-  const lines = md.split('\n'), out = []
-  let pos = 0
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i]
+  const e = md.indexOf('</table>'), start = e < 0 ? 0 : e + 8
+  const out = []; let pos = 0
+  for (const [i,l] of md.split('\n').entries()) {
     if (pos >= start && l.trim() && !/^\s*[#<|>`-]/.test(l) && !/^\s*\d+\.\s/.test(l)) out.push(i)
     pos += l.length + 1
   }
-  return out // 行号
+  return out
 }
-export function editPara(md, k, fn) {
-  const idx = paraLines(md)
-  if (idx.length < k) throw new Error(`正文不足${k}段`)
-  const lines = md.split('\n')
-  const r = fn(lines[idx[k - 1]])
-  if (r === null) lines.splice(idx[k - 1], 1); else lines[idx[k - 1]] = r
+export function editPara(md,k,fn) {
+  const lines = md.split('\n'), i = paraLines(md)[k-1]
+  if (i === undefined) throw new Error(`正文不足${k}段`)
+  const v = fn(lines[i]); if (v === null) lines.splice(i,1); else lines[i] = v
   return lines.join('\n')
+}
+export function paragraphHeading(md,k) {
+  const target = paraLines(md)[k-1]
+  if (target === undefined) throw new Error('修改段落不存在')
+  let h = ''
+  for (const l of md.split('\n').slice(0,target+1)) if (/^## /.test(l)) h = l.slice(3).trim()
+  return h
 }

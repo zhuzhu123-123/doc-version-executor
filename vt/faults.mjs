@@ -1,139 +1,97 @@
-// 制造错误代码：夹在执行器和 Notion 之间（替换全局 fetch），按测试总表里的“测试错误”制造事故。
-// 执行器代码不引用本文件，也不知道它存在。
-
-const ID32 = /[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+// 故障夹在执行器与底层读写之间；执行器只接收普通io，不接收测试编号、答案或本文件配置。
+import { StopError, RetryableError } from '../executor.mjs'
 import { editPara, paraLines } from './body.mjs'
-const clean = (s) => s.replace(/-/g, '')
-const resp = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } })
-const netErr = (why) => { const e = new TypeError('fetch failed'); e.cause = why; return e }
-
-// 版本管理表里的行
-const tableRange = (md) => { const a = md.indexOf('<table'), b = md.indexOf('</table>'); return a < 0 || b < a ? null : [a, b] }
-const rowsOf = (md) => { const r = tableRange(md); return r ? md.slice(r[0], r[1]).match(/<tr>[\s\S]*?<\/tr>/g) || [] : [] }
-const cells = (row) => (row.match(/<td>[\s\S]*?<\/td>/g) || []).map((c) => c.slice(4, -5))
-const mkRow = (c) => '<tr>\n' + c.map((x) => `<td>${x}</td>`).join('\n') + '\n</tr>'
-function editRows(md, fn) {
-  const r = tableRange(md); if (!r) return md
-  const part = md.slice(r[0], r[1]); const rows = part.match(/<tr>[\s\S]*?<\/tr>/g) || []
-  const next = fn(rows.map(cells)); if (!next) return md
+const rs = md => (md.match(/<table[\s\S]*?<\/table>/)?.[0].match(/<tr>[\s\S]*?<\/tr>/g) || [])
+const cells = row => [...row.matchAll(/<td>([\s\S]*?)<\/td>/g)].map(m=>m[1])
+const version = row => Number(cells(row)[0]?.match(/第\s*(\d+)\s*版/)?.[1] || 0)
+function changeRows(md,fn) {
+  const old = rs(md), values = old.map(cells); fn(values)
   let i = 0
-  return md.slice(0, r[0]) + part.replace(/<tr>[\s\S]*?<\/tr>/g, () => mkRow(next[i++])) + md.slice(r[1])
+  return md.replace(/<table[\s\S]*?<\/table>/,t=>t.replace(/<tr>[\s\S]*?<\/tr>/g,()=>'<tr>\n'+values[i++].map(c=>`<td>${c}</td>`).join('\n')+'\n</tr>'))
 }
-// 这次写入是不是“写版本行”（最后一行是新编号，不是异常行）
-const isVersionWrite = (md, before) => { const rs = rowsOf(md); return rs.length === before + 1 && /^第\s*\d+\s*版$/.test(cells(rs.at(-1))[0] || '') }
-const isExceptionWrite = (md) => { const rs = rowsOf(md); return rs.length && cells(rs.at(-1))[0] === '异常' }
-
-// 副本漏掉好几段：版本管理表后面的正文里，删掉第5、10、15、20个非空行
-const dropMany = (md) => { const e = md.indexOf('</table>'); const head = md.slice(0, e), lines = md.slice(e).split('\n'); let n = 0; return head + lines.filter((l, i) => i === 0 || !l.trim() || ![5, 10, 15, 20].includes(++n)).join('\n') }
-// 副本写错一个地方：正文里第一个带数字的段落，把第一个数字改掉一位（d → d+1，9 → 0）
+const id = u => u.split(/[?#]/)[0].replace(/\/$/,'').replace(/-/g,'').slice(-32)
+function firstLink(md,mode) {
+  let done = false
+  const replace = u => {
+    const n=id(u); if (!/^[0-9a-f]{32}$/i.test(n)) return u
+    done=true
+    if(mode==='other')return 'https://www.notion.so/121ed3ae2bb349d7b092ed95b3b17f0c'
+    if(mode==='dated')return `https://www.notion.so/记录-2026-08-09-${n}`
+    return 'https://www.notion.so/'+n.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5')
+  }
+  let out=md.replace(/(<(?:mention-page|mention)\b[^>]*url=")([^"]+)(")/g,(m,a,u,b)=>done?m:a+replace(u)+b)
+  if(!done) out=out.replace(/(\]\()([^)]+)(\))/g,(m,a,u,b)=>done?m:a+replace(u)+b)
+  if(!done || out===md)throw new Error('事故未实际制造：没有匹配的可替换页面链接')
+  return out
+}
 function typo(md) {
-  const lines = md.split('\n')
-  for (const i of paraLines(md)) { const l = lines[i]; if (!l.includes('<') && !l.includes('](') && /\d/.test(l)) { lines[i] = l.replace(/\d/, (d) => String((Number(d) + 1) % 10)); return lines.join('\n') } }
-  throw new Error('正文里没有数字')
+  const lines=md.split('\n')
+  for(const i of paraLines(md))if(!/[<]|\]\(/.test(lines[i]) && /\d/.test(lines[i])) {
+    lines[i]=lines[i].replace(/\d/,d=>String((Number(d)+1)%10));return lines.join('\n')
+  }
+  throw new Error('事故未实际制造：没有符合条件的数字段落')
 }
-// 副本漏掉一段：正文第4段
-const dropPara = (md) => editPara(md, 4, () => null)
-// 最近成立的版本号（不含正在写的最后一行）
-const latest = (rs) => Math.max(0, ...rs.slice(0, -1).map((c) => { const m = (c[0] || '').match(/^第\s*(\d+)\s*版$/); return m ? Number(m[1]) : 0 }))
-
-/**
- * plan：本测试要制造的事故列表，每项 { kind, times?, ... }
- * ctx：{ doc, archive, rowsBefore }
- * base：真正发请求的 fetch（真实 Notion 或试跑用的假 Notion）
- */
-export function makeFaultyFetch(plan, ctx, base) {
-  const used = {}
-  const take = (kind) => { const f = plan.find((p) => p.kind === kind); if (!f) return null; used[kind] = (used[kind] || 0) + 1; const n = used[kind] - (f.skip || 0); if (n < 1) return null; if (f.times !== undefined && n > f.times) return null; return f }
-  const has = (kind) => plan.some((p) => p.kind === kind)
-  const log = (ctx.faultLog = [])
-  const stats = (ctx.stats = { versionWrites: 0, exceptionWrites: 0, pagesCreated: [], createAttempts: 0, docChangedByOthers: false })
-  ctx.copyId = null
-
-  return async function faultyFetch(url, init = {}) {
-    const u = new URL(url); const path = u.pathname.replace(/^\/v1/, ''); const method = (init.method || 'GET').toUpperCase()
-    let body = init.body ? JSON.parse(init.body) : null
-    const m = path.match(/^\/pages\/([^/]+)(\/markdown)?$/)
-    const target = m ? clean(m[1]) : null, isMd = !!m?.[2]
-    const isDoc = target === ctx.doc, isCopy = ctx.copyId && target === ctx.copyId
-    const send = (b = body) => base(url, { ...init, body: b ? JSON.stringify(b) : init.body })
-
-    // ---- 建副本页 ----
-    if (method === 'POST' && path === '/pages') {
+function dropMany(md) {
+  const e=md.indexOf('</table>')+8, lines=md.slice(e).split('\n');let n=0
+  return md.slice(0,e)+lines.filter(l=>!l.trim() || ![5,10,15,20].includes(++n)).join('\n')
+}
+export function makeFaultyIo(plan,ctx,base) {
+  const probes={}, stats=ctx.stats={versionWrites:0,exceptionWrites:0,copyWrites:0,createAttempts:0,pagesCreated:[],faultHits:{},events:[]}
+  ctx.copyId=null;ctx.faultLog=[]
+  const take=kind=>{
+    const f=plan.find(x=>x.kind===kind);if(!f)return false
+    const n=(probes[kind]=(probes[kind]||0)+1)-(f.skip||0)
+    return n>0 && (f.times===undefined || n<=f.times)
+  }
+  const hit=(kind,detail)=>{stats.faultHits[kind]=(stats.faultHits[kind]||0)+1;ctx.faultLog.push({kind,detail})}
+  const mutate=(md,kind,fn)=>{const out=fn(md);if(out===md)throw new Error('事故未实际制造：'+kind);hit(kind,'正文或记录内容实际改变');return out}
+  return {
+    ...base,
+    async createPage(parent,title) {
       stats.createAttempts++
-      const parent = clean(body?.parent?.page_id || '')
-      if (parent === ctx.archive && has('archiveUnavailable')) { log.push('存档页打不开：返回 404'); return resp(404, { object: 'error', status: 404, code: 'object_not_found', message: 'Could not find page' }) }
-      if (parent === ctx.archive && take('copyTitleWrong')) { body = { ...body, properties: { title: { title: [{ text: { content: body.properties.title.title[0].text.content.split('｜')[0] } }] } } }; log.push('建副本页时把标题写成只有“第N版副本”') }
-      const r = await send(); const t = await r.clone().text()
-      if (r.ok) { const id = clean(JSON.parse(t).id); stats.pagesCreated.push({ id, parent }); if (parent === ctx.archive) ctx.copyId = id }
-      return r
-    }
-
-    // ---- 改副本标题 ----
-    if (method === 'PATCH' && isCopy && !isMd && body?.properties?.title && take('copyTitleWrong')) {
-      body = { properties: { title: { title: [{ text: { content: body.properties.title.title[0].text.content.split('｜')[0] } }] } } }; log.push('改副本标题时仍只写“第N版副本”')
-      return send()
-    }
-
-    // ---- 写文档 ----
-    if (method === 'PATCH' && isDoc && isMd) {
-      let md = body.replace_content.new_str
-      const ver = isVersionWrite(md, ctx.rowsBefore), exc = isExceptionWrite(md)
-      if (ver) stats.versionWrites++; if (exc) stats.exceptionWrites++
-      if ((ver || exc) && has('noPermission')) { log.push('写版本管理表：返回 403 没有权限'); return resp(403, { object: 'error', status: 403, code: 'restricted_resource', message: 'Insufficient permissions' }) }
-      if (ver) {
-        let f
-        if ((f = take('dupVersion'))) { let to; md = editRows(md, (rs) => { to = `第 ${latest(rs)} 版`; rs.at(-1)[0] = to; return rs }); log.push(`版本行编号改写成和最近成立版本同号的“${to}”`) }
-        if ((f = take('prevNoteBlank'))) { md = editRows(md, (rs) => { rs[rs.length - 2][5] = ''; return rs }); log.push('上一版的“下一版操作说明”写成空') }
-        if ((f = take('newNoteFilled'))) { md = editRows(md, (rs) => { rs.at(-1)[5] = rs.at(-1)[3]; return rs }); log.push('新一行的“下一版操作说明”填上了内容') }
-        if ((f = take('editRow1'))) { md = editRows(md, (rs) => { rs[1][3] = rs[1][3] + '并校对了全文术语。'; return rs }); log.push('顺带改动了第1版那一行的操作说明') }
-        body = { ...body, replace_content: { new_str: md } }
-        if (take('timeoutAfterWrite')) { const r = await send(); log.push(`版本行已写入（${r.status}），但对执行器报“超时”`); throw netErr('timeout') }
-        const r = await send()
-        if (r.ok && take('changeDocAfterRow')) {
-          const cur = JSON.parse(await (await base(`https://api.notion.com/v1/pages/${ctx.doc}/markdown`, { method: 'GET', headers: init.headers })).text()).markdown
-          const changed = editPara(cur, 2, (l) => l + '有人补充：这一点很重要。')
-          await base(`https://api.notion.com/v1/pages/${ctx.doc}/markdown`, { method: 'PATCH', headers: init.headers, body: JSON.stringify({ type: 'replace_content', replace_content: { new_str: changed } }) })
-          stats.docChangedByOthers = true; log.push('版本行写完后，模拟有人在正文第2段补了一句话')
-        }
-        return r
+      if(parent!==ctx.archive)throw new Error('测试工具发现执行器尝试在非指定父页面建副本')
+      if(take('archiveUnavailable')){hit('archiveUnavailable','指定存档父页面下建页返回404');throw new StopError('指定版本副本存档父页面不可用（404）')}
+      if(take('copyTitleWrong')){hit('copyTitleWrong','首次建页标题被截短');title=title.split('｜')[0]}
+      const n=await base.createPage(parent,title);ctx.copyId=n;stats.pagesCreated.push({id:n,parent});return n
+    },
+    async setTitle(page,title) {
+      if(page===ctx.copyId && take('copyTitleWrong')){hit('copyTitleWrong','首次修改标题仍被截短');title=title.split('｜')[0]}
+      return base.setTitle(page,title)
+    },
+    async getMd(page) {
+      if(page===ctx.copyId) {
+        if(take('copyReadError')){hit('copyReadError','读回副本模拟网络错误');throw new RetryableError('模拟网络错误')}
+        if(take('copyUnverifiable')){hit('copyUnverifiable','读回副本返回null正文');return null}
+        let md=await base.getMd(page)
+        if(take('copyAltLink'))md=mutate(md,'copyAltLink',x=>firstLink(x,'alt'))
+        if(take('copyDatedLink'))md=mutate(md,'copyDatedLink',x=>firstLink(x,'dated'))
+        return md
       }
-      return send()
-    }
-
-    // ---- 写副本 ----
-    if (method === 'PATCH' && isCopy && isMd) {
-      let md = body.replace_content.new_str
-      if (md.trim()) {
-        if (take('copyDropPara')) { md = dropPara(md); log.push('副本漏掉一段（正文第4段）') }
-        else if (take('copySwapLink')) { md = md.replace(/(<mention-page url="[^"]*?)([0-9a-f]{32})/, (x, a) => a + ctx.otherPage); log.push('副本里第一个页面链接换成了另一个页面') }
-        else if (take('copyDropMany')) { md = dropMany(md); log.push('副本漏掉好几段（正文里的第5、10、15、20段）') }
-        else if (take('copyTypo')) { md = typo(md); log.push('副本里第一个带数字的段落改错了一位数字') }
-        else if (take('copyMixed')) { md = dropPara(md); md = typo(md); md = md.replace(/(<mention-page url="[^"]*?)([0-9a-f]{32})/, (x, a) => a + ctx.otherPage); log.push('副本同时漏掉一段、改了一个数字、换了一个页面链接') }
-        body = { ...body, replace_content: { new_str: md } }
+      return base.getMd(page)
+    },
+    async putMd(page,md) {
+      const rows=rs(md), ver=page===ctx.doc && rows.length===ctx.rowsBefore+1 && version(rows.at(-1))>0
+      const exc=page===ctx.doc && cells(rows.at(-1)||'')[0]?.trim()==='异常'
+      stats.events.push({operation:'putMd',page,kind:ver?'version':exc?'exception':page===ctx.copyId?'copy':'other'})
+      if(ver)stats.versionWrites++;if(exc)stats.exceptionWrites++
+      if((ver||exc) && take('noPermission')){hit('noPermission','写入文档返回403');throw new StopError('没有修改权限（403）')}
+      if(ver) {
+        if(take('dupVersion'))md=mutate(md,'dupVersion',x=>changeRows(x,v=>{v.at(-1)[0]=`第 ${Math.max(0,...rs(x).slice(0,-1).map(version))} 版`}))
+        if(take('prevNoteBlank'))md=mutate(md,'prevNoteBlank',x=>changeRows(x,v=>{v[v.length-2][5]=''}))
+        if(take('newNoteFilled'))md=mutate(md,'newNoteFilled',x=>changeRows(x,v=>{v.at(-1)[5]=v.at(-1)[3]}))
+        if(take('editRow1'))md=mutate(md,'editRow1',x=>changeRows(x,v=>{v[1][3]+='并校对了全文术语。'}))
+        await base.putMd(page,md)
+        if(take('timeoutAfterWrite')){hit('timeoutAfterWrite','底层写入成功后向执行器返回超时');throw new RetryableError('模拟写入成功后超时')}
+        return
       }
-      return send()
-    }
-
-    // ---- 读副本 ----
-    if (method === 'GET' && isCopy && isMd) {
-      if (take('copyReadError')) { log.push('读回副本：网络报错'); throw netErr('ECONNRESET') }
-      if (take('copyUnverifiable')) { log.push('读回副本：返回内容无法计算指纹'); return resp(200, { object: 'page_markdown', markdown: null, truncated: false }) }
-      const r = await send()
-      if (r.ok && take('copyAltLink')) {
-        const j = JSON.parse(await r.text())
-        j.markdown = j.markdown.replace(/(<mention-page url="[^"]*?)([0-9a-f]{32})/, (x, a, id) => a + `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`)
-        log.push('读回副本：第一个页面链接换成同一页面的另一种网址写法')
-        return resp(200, j)
+      if(page===ctx.copyId && md.trim()) {
+        stats.copyWrites++
+        if(take('copyDropPara'))md=mutate(md,'copyDropPara',x=>editPara(x,4,()=>null))
+        else if(take('copyDropMany'))md=mutate(md,'copyDropMany',dropMany)
+        else if(take('copyTypo'))md=mutate(md,'copyTypo',typo)
+        else if(take('copyMixed'))md=mutate(md,'copyMixed',x=>firstLink(typo(editPara(x,4,()=>null)),'other'))
       }
-      if (r.ok && take('copyDatedLink')) {
-        const j = JSON.parse(await r.text())
-        j.markdown = j.markdown.replace(/(<mention-page url=")[^"]*?([0-9a-f]{32})"/, (x, a, id) => a + 'https://www.' + 'notion.so/记录-2026-08-09-' + id + '"')
-        log.push('读回副本：第一个页面链接换成同一页面的另一种网址写法，编号前面紧挨着日期“2026-08-09-”')
-        return resp(200, j)
-      }
-      return r
+      return base.putMd(page,md)
     }
-
-    return send()
   }
 }
