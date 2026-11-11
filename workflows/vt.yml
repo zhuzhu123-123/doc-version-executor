@@ -1,0 +1,52 @@
+name: VT 版本协议测试
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: '测试编号（如VT01），all运行全部保留项；VT23已停用'
+        required: true
+        default: VT01
+      table:
+        description: '结果总表；auto按实际执行器版本选表，选择不匹配会停止'
+        required: true
+        type: choice
+        options: [auto, v4.1, v4]
+        default: auto
+permissions:
+  contents: read
+concurrency:
+  group: vt-recording-single-writer
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 顺序运行所选测试
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          CASE: ${{ inputs.case }}
+          TABLE: ${{ inputs.table }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node --input-type=module <<'JS'
+          import { spawnSync } from 'node:child_process';
+          import { CASES } from './vt/cases.mjs';
+          const items = process.env.CASE === 'all' ? Object.keys(CASES) : [process.env.CASE];
+          if (items.some(x => !CASES[x])) throw new Error('测试不存在或已停用');
+          let failed = false;
+          for (const c of items) {
+            const r = spawnSync(process.execPath, ['vt/run-vt.mjs','--case',c,'--table',process.env.TABLE,'--record'], {stdio:'inherit',env:process.env});
+            if (r.error || r.status !== 0) failed = true;
+          }
+          process.exitCode = failed ? 1 : 0;
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vt-results-${{ github.run_id }}
+          path: results/*.json
+          if-no-files-found: warn

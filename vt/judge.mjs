@@ -1,94 +1,85 @@
-// 判定代码：运行结束后，对照测试总表这一行的“正确结果”检查样本，只输出通过或失败。
-// 按协议单独编写，不引用执行器的任何代码；预期编号在执行器运行前从样本现算。
+// 独立结果判定：不导入执行器，不读取执行器返回的哈希作为正确答案。
 import { createHash } from 'node:crypto'
-
-// ---------- 自己的读表和比对（不用执行器的） ----------
-const lastId = (u) => ((u || '').match(/[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || [u || '']).pop().replace(/-/g, '')
-// 比对时：评论编号不算；行尾空白不算；子页面块不算；同一页面的不同网址写法算同一个链接
-function canonical(md) {
-  if (typeof md !== 'string') return null
-  const lines = md.replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => !l.startsWith('<page url='))
-  return lines.join('\n').trim()
-    .replace(/ discussion-urls="[^"]*"/g, '')
-    .replace(/<mention-page url="([^"]+)"\s*\/>/g, (x, u) => `@[${lastId(u)}]`)
-    .replace(/<mention-page url="([^"]+)">[\s\S]*?<\/mention-page>/g, (x, u) => `@[${lastId(u)}]`)
-    .replace(/\[[^\]]*\]\(([^)]+)\)/g, (x, u) => `@[${lastId(u)}]`)
+export const pageId = u => {
+  const text=(u||'').split(/[?#]/)[0].replace(/\/+$/,'')
+  const m=text.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$/i)
+  return m ? m[1].replace(/-/g,'').toLowerCase() : null
 }
-const fp = (md) => { const c = canonical(md); return c === null ? null : createHash('sha256').update(c).digest('hex') }
-const same = (a, b) => canonical(a) === canonical(b)
-function tableRows(md) {
-  if (typeof md !== 'string') return null
-  const a = md.indexOf('<table'), b = md.indexOf('</table>')
-  if (a < 0 || b < a) return null
-  return (md.slice(a, b).match(/<tr>[\s\S]*?<\/tr>/g) || []).map((r) => (r.match(/<td>[\s\S]*?<\/td>/g) || []).map((c) => c.slice(4, -5).trim()))
+export function canonical(md) {
+  if(typeof md!=='string')return null
+  return md.replace(/\r\n?/g,'\n').replace(/ discussion-urls="[^"]*"/g,'')
+    .split('\n').map(l=>l.replace(/\s+$/,'')).join('\n').trim()
+    .replace(/<page\b[^>]*url="([^"]+)"[^>]*>[\s\S]*?<\/page>/g,(m,u)=>`[REF:${pageId(u)||u}]`)
+    .replace(/<(?:mention-page|mention)\b[^>]*url="([^"]+)"[^>]*(?:\/>|>[\s\S]*?<\/(?:mention-page|mention)>)/g,(m,u)=>`[REF:${pageId(u)||u}]`)
+    .replace(/\[[^\]]*\]\(([^)]+)\)/g,(m,u)=>`[REF:${pageId(u)||u}]`)
 }
-// 版本行的编号；“异常”行和表头返回 null
-const num = (row) => { const m = (row?.[0] || '').match(/^第\s*(\d+)\s*版$/); return m ? Number(m[1]) : null }
-
-/**
- * r: { c, note, title, before, after, copy:{ id, md, title, parent } | null, result, logs, stats, archive }
- * before = 普通修改完、执行器运行前的文档；after = 运行结束后的文档
- */
+const same=(a,b)=>typeof a==='string' && typeof b==='string' && canonical(a)===canonical(b)
+export const contentHash=md=>typeof md==='string'?createHash('sha256').update(canonical(md)).digest('hex'):null
+const table = md => typeof md==='string' ? md.match(/<table[\s\S]*?<\/table>/)?.[0] : null
+export const rows = md => (table(md)?.match(/<tr>[\s\S]*?<\/tr>/g)||[]).map(r=>[...r.matchAll(/<td>([\s\S]*?)<\/td>/g)].map(m=>m[1].trim()))
+const vnum=r=>Number(r?.[0]?.match(/^第\s*(\d+)\s*版$/)?.[1]||0)
+const esc=s=>String(s).replace(/</g,'＜').replace(/>/g,'＞').replace(/\n/g,' ')
 export function judge(r) {
-  const { c } = r, checks = []
-  const ok = (name, pass, detail = '') => checks.push({ name, pass: !!pass, detail })
-  const B = tableRows(r.before), A = tableRows(r.after), log = r.logs.join('\n')
-  const out = JSON.stringify(r.result)
-
-  // 运行前从样本现算预期：最近成立的版本 M，新版本应为 M+1
-  const nums = (B || []).map(num)
-  const M = Math.max(0, ...nums.filter((n) => n !== null))
-  const N = M + 1
-  const prevIdx = M ? nums.lastIndexOf(M) : -1
-  const rowSame = (x, y) => same((x || []).join('|'), (y || []).join('|'))
-
-  if (c.expect === 'noTable') {
-    ok('结果是版本管理失败', r.result.result === '版本管理失败')
-    ok('没有新建表，文档一字未改', fp(r.after) === fp(r.before))
-    ok('没有建副本页', r.stats.pagesCreated.length === 0)
-    ok('执行结果写明版本管理表缺失', /版本管理表/.test(r.result.problem || ''), r.result.problem)
-  } else if (c.expect === 'stopBefore') {
-    ok('结果是版本管理失败', r.result.result === '版本管理失败')
-    ok('文档一字未改', r.after === r.before)
-    ok('没有写版本行，也没有写异常行', r.stats.versionWrites === 0 && r.stats.exceptionWrites === 0, `版本行${r.stats.versionWrites}次，异常行${r.stats.exceptionWrites}次`)
-    ok('没有建副本页', r.stats.pagesCreated.length === 0 && r.stats.createAttempts === 0)
-    for (const w of c.words || []) ok(`执行结果写明“${w}”`, (r.result.problem || '').includes(w), r.result.problem)
-  } else if (c.expect === 'noRetry') {
-    ok('结果是版本管理失败', r.result.result === '版本管理失败')
-    ok('版本行只尝试写了1次（不重试）', r.stats.versionWrites === 1, `尝试${r.stats.versionWrites}次`)
-    ok('文档版本管理表没有变', B && A && A.length === B.length && B.every((x, i) => rowSame(x, A[i])))
-    ok('执行结果写明失败步骤、已完成部分、待处理问题', r.result.step && r.result.done && r.result.problem, out)
+  const checks=[],ok=(name,pass,detail='')=>checks.push({name,pass:!!pass,detail})
+  const B=rows(r.before),A=rows(r.after),M=Math.max(0,...B.map(vnum)),N=M+1,prev=B.findLastIndex(x=>vnum(x)===M && M>0)
+  const rowSame=(x,y)=>Array.isArray(x)&&Array.isArray(y)&&x.length===y.length&&x.every((c,i)=>same(c,y[i]))
+  const log=r.logs.join('\n'),body=md=>typeof md==='string'?md.replace(/<table[\s\S]*?<\/table>/,'<VERSION_TABLE>'):null
+  ok('实际文档可读',typeof r.after==='string')
+  ok('版本管理未改动业务正文及附件引用',same(body(r.before),body(r.after)))
+  for(const f of r.c.faults) {
+    const n=r.stats.faultHits[f.kind]||0
+    ok('事故实际触发：'+f.kind,n>0,`实际${n}次`)
+    if(f.times!==undefined)ok('事故次数符合配置：'+f.kind,n===f.times,`预期${f.times}，实际${n}`)
+  }
+  if(r.c.expect==='noTable') {
+    ok('版本管理失败',r.result.result==='版本管理失败')
+    ok('没有新建表或改写正文',same(r.before,r.after))
+    ok('没有建立副本',r.stats.createAttempts===0)
+    ok('明确说明版本表缺失',/版本管理表/.test(r.result.problem||''))
+  } else if(r.c.expect==='noRetry') {
+    ok('版本管理失败',r.result.result==='版本管理失败')
+    ok('版本写入只尝试一次',r.stats.versionWrites===1)
+    ok('尝试记录异常一次但未写成',r.stats.exceptionWrites===1 && !r.result.tableWritten)
+    ok('版本表不变',B.length===A.length&&B.every((x,i)=>rowSame(x,A[i])))
+    ok('输出完整失败信息',r.result.step&&r.result.done&&r.result.problem?.includes('403'))
   } else {
-    ok('文档还有版本管理表', A)
-    if (!A) return finish()
-    ok('表里只多了一行', A.length === B.length + 1, `${B.length} → ${A.length}`)
-    const last = A.at(-1) || []
-    if (c.expect === 'ok') {
-      ok('结果是版本成立', r.result.result === '版本成立', r.result.problem || '')
-      ok(`最新一行编号＝运行前最近成立的版本加一（第 ${M} 版 → 第 ${N} 版）`, num(last) === N, last[0])
-      ok('最新一行的下一版操作说明为空', last[5] === '')
-      if (prevIdx >= 0) ok('上一版那一行的下一版操作说明已按本次说明填好', A[prevIdx] && same(A[prevIdx][5], r.note.replace(/</g, '＜').replace(/>/g, '＞')))
-      ok('其余旧行一个字不改', B.every((x, i) => i === prevIdx || rowSame(x, A[i])))
-      ok('副本存在且在存档页', r.copy && r.copy.parent === r.archive)
-      ok('新一行链接指向这个副本', r.copy && lastId(last[6]) === r.copy.id)
-      ok(`副本标题为“第${N}版副本｜文档标题”`, r.copy && r.copy.title === `第${N}版副本｜${r.title}`, r.copy?.title)
-      ok('副本和文档逐字一致', r.copy && fp(r.copy.md) !== null && fp(r.copy.md) === fp(r.after))
-      ok('没有多建副本页', r.stats.pagesCreated.length === 1, `${r.stats.pagesCreated.length}个`)
+    ok('版本表只新增一行',A.length===B.length+1)
+    const last=A.at(-1)||[]
+    if(r.c.expect==='ok') {
+      ok('版本成立',r.result.result==='版本成立',r.result.problem||'')
+      ok('新版本编号正确且只出现一次',vnum(last)===N&&A.filter(x=>vnum(x)===N).length===1)
+      ok('新行是完整七列',last.length===7)
+      ok('当前操作说明正确',same(last[3],esc(r.note)))
+      ok('操作人正确',last[2]===r.who)
+      const time=last[1]||'',parsed=Date.parse(time.replace(/\//g,'-').replace(' ','T')+':00+08:00')
+      ok('时间为本轮实际时间',Number.isFinite(parsed)&&parsed>=r.started-60000&&parsed<=r.finished+60000,time)
+      ok('影响位置与运行前独立预期一致',!!r.expectedWhere&&same(last[4],r.expectedWhere),`${last[4]} / ${r.expectedWhere}`)
+      ok('新行下一版说明留空',last[5]==='')
+      for(let i=0;i<B.length;i++)for(let k=0;k<B[i].length;k++) {
+        if(i===prev && k===5)ok('上一版指定格填写正确',same(A[i]?.[k],esc(r.note)))
+        else ok(`历史第${i}行第${k+1}列未改`,same(B[i][k],A[i]?.[k]))
+      }
+      ok('只建立一份副本',r.stats.pagesCreated.length===1)
+      ok('独立读回副本父页面正确',r.copy?.parent===r.archive)
+      ok('副本链接指向本次副本',r.copy && pageId((last[6]||'').match(/url="([^"]+)"|\]\(([^)]+)\)/)?.slice(1).find(Boolean))===r.copy.id)
+      ok('副本标题正确',r.copy?.title===`第${N}版副本｜${r.title}`)
+      ok('副本与文档内容一致',r.copy&&same(r.copy.md,r.after))
+      ok('副本没有作为子页面挂在业务文档下',!r.copy||!new RegExp(`<page\\b[^>]*url="[^"]*${r.copy.id}[^\"]*"`).test(r.after||''))
     } else {
-      ok('结果不是版本成立', r.result.result === '版本管理失败')
-      ok('最新一行是“异常”', last[0] === '异常', last[0])
-      ok('旧行一个字不改', B.every((x, i) => rowSame(x, A[i])))
-      for (const w of c.words || []) ok(`异常行写明“${w}”`, last.join(' ').includes(w), last.slice(3, 6).join(' / '))
-      if (c.copyLink === 'copy') ok('异常行副本链接填这次建的副本页', r.copy && lastId(last[6]) === r.copy.id)
-      if (c.copyLink === 'none') ok('异常行副本链接写“无”', last[6] === '无', last[6])
-      if (c.noCopy) ok('没有建副本页', r.stats.pagesCreated.length === 0)
-      if (c.noDupRow) ok(`表里不留撞号的“第 ${M} 版”`, A.filter((x) => num(x) === M).length === (M ? 1 : 0))
-      if (c.noCopyElsewhere) ok('没有在别处建副本页', r.stats.pagesCreated.length === 0)
+      ok('版本管理失败而非成立',r.result.result==='版本管理失败')
+      ok('末行是异常',last[0]==='异常')
+      ok('所有旧行不变',B.every((x,i)=>rowSame(x,A[i])))
+      ok('没有新成立版本',!A.some(x=>vnum(x)===N))
+      ok('异常行七列及操作人正确',last.length===7&&last[2]===r.who)
+      for(const w of r.c.words||[])ok('异常原因包含：'+w,last.slice(3,6).join(' ').includes(w))
+      if(r.c.noCopy)ok('没有成功建立副本且异常链接为无',r.stats.pagesCreated.length===0&&last[6]==='无')
+      else ok('异常链接指向本次已建副本',r.copy&&pageId((last[6]||'').match(/url="([^"]+)"|\]\(([^)]+)\)/)?.slice(1).find(Boolean))===r.copy.id)
     }
   }
-  for (const s of c.logHas || []) ok(`运行记录含“${s}”`, log.includes(s))
-  if (c.copyFailsFirst) ok(`前${c.copyFailsFirst}次副本比对不一致、第${c.copyFailsFirst + 1}次一致`, (log.match(/\[写入并比对副本\] 第\d次 失败：副本与文档不一致/g) || []).length === c.copyFailsFirst && log.includes(`[写入并比对副本] 第${c.copyFailsFirst + 1}次 成功`))
-  if (c.outputSays) ok(`输出结果说明“${c.outputSays}”`, (out + log).includes(c.outputSays))
-  return finish()
-  function finish() { return { pass: checks.every((x) => x.pass), checks } }
+  for(const s of r.c.logHas||[])ok('过程日志：'+s,log.includes(s))
+  if(r.c.versionWrites!==undefined)ok('版本行提交次数正确',r.stats.versionWrites===r.c.versionWrites,`${r.stats.versionWrites}`)
+  if(r.c.copyWrites!==undefined)ok('不因等价链接重写副本',r.stats.copyWrites===r.c.copyWrites,`${r.stats.copyWrites}`)
+  if(r.c.copyFailures)ok('副本不一致次数正确',(log.match(/\[写入并比对副本\] 第\d次 失败：副本与文档不一致/g)||[]).length===r.c.copyFailures)
+  if(r.c.noCopy && r.c.expect==='exception')ok('没有换位置建副本',r.stats.pagesCreated.length===0)
+  return {pass:checks.length>0&&checks.every(x=>x.pass),checks}
 }

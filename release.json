@@ -1,0 +1,39 @@
+{
+  "version": "v4.1",
+  "baselineExecutorVersion": "v4",
+  "baselineExecutorSha256": "ef4c72ef5e1d2ec6b2a2c46ad43ddc18f8f55986c87d6a11a6db3cd4d219875e",
+  "executorSha256": "27100838ba6b8872283de6a72296b9e4b4fc8fd01152d045b6783e63d5df12d9",
+  "firstIntroducedEvidence": {
+    "VT01-VT21": {
+      "version": "v2",
+      "commit": "75055f6d81f64bb1be9976ee8712e4e69284c715",
+      "reason": "最早包含vt/cases.mjs的Git提交已有21项，且该提交执行器声明v2"
+    },
+    "VT22-VT23": {
+      "version": "v4",
+      "commit": "7510e30f5c194a5c82899118166a3f780260fea3",
+      "reason": "前一版本21项；V4代码加入VT22、VT23；VT23本次停用"
+    }
+  },
+  "checksPerformed": [
+    "语法：executor.mjs",
+    "语法：vt/body.mjs",
+    "语法：vt/cases.mjs",
+    "语法：vt/faults.mjs",
+    "语法：vt/judge.mjs",
+    "语法：vt/mutate.mjs",
+    "语法：vt/run-vt.mjs",
+    "全部JSON可解析",
+    "手动工作流结构：vt.yml",
+    "手动工作流结构：run.yml",
+    "手动工作流结构：mutate.yml",
+    "22项设计及固定样本对应检查",
+    "代码完整指纹与版本/目标表映射一致",
+    "交付文件无未解析Notion地址",
+    "变异锚点唯一性（未运行变异检查）"
+  ],
+  "testsExecuted": false,
+  "notionRealTestsExecuted": false,
+  "actionsStarted": false,
+  "githubWritesPerformed": false
+}

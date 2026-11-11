@@ -1,4 +1,4 @@
-// 版本管理执行器 v5（在v4上修复章节、引言与顶部时间；保留原运行流程）
+// 版本管理执行器 v4.1（基于原V4修订：保留普通附件、严格核对版本记录）
 // 依据：《AI 与人类协作文档版本管理：执行协议》第22版
 // 用法：NOTION_TOKEN=... node executor.mjs --doc <文档ID> --archive <存档页ID> --note "本次操作说明" --who "操作人"
 // 结果：退出码 0 = 版本成立；1 = 版本管理失败
@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const EXECUTOR_VERSION = 'v5'
+export const EXECUTOR_VERSION = 'v4.1'
 const COLS = ['版本', '当前版本操作时间', '当前版本操作人', '当前版本操作说明', '当前版本影响位置', '下一版操作说明', '文档副本存档链接']
 const MAX = 3
 
@@ -39,6 +39,7 @@ export function notionIo(token) {
       return r.markdown
     },
     async putMd(id, md) { await call('PATCH', `/pages/${id}/markdown`, { type: 'replace_content', replace_content: { new_str: md } }) },
+    async getParent(id) { const p = await call('GET', `/pages/${id}`); return p.parent?.page_id?.replace(/-/g, '') || null },
     async getTitle(id) {
       const p = await call('GET', `/pages/${id}`)
       const t = Object.values(p.properties).find((x) => x.type === 'title')
@@ -56,8 +57,12 @@ export function notionIo(token) {
 // ---------- 工具函数 ----------
 // 读页面编号：编号永远在链接最后。三步：去掉 ? 和 # 后面的内容（以及末尾的斜杠）；去掉横线；取最后 32 位。
 export const pid = (u) => { const path = u.split(/[?#]/)[0].replace(/\/+$/, ''); return path.replace(/-/g, '').slice(-32) }
-const norm = (s) => s.replace(/ discussion-urls="[^"]*"/g, '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => !/^<page url=/.test(l)).join('\n').trim()
+const norm = (s) => s.replace(/ discussion-urls="[^"]*"/g, '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\s+$/, '')).join('\n').trim()
+// 子页面所有权块只在副本中转换为指向原附件的普通链接；不移动附件，不备份附件内部内容。
+export const snapshotContent = (md) => md.replace(/<page\b[^>]*\burl="([^"]+)"[^>]*>[\s\S]*?<\/page>/g, (m,u) => `<mention-page url="${u}"/>`)
 const links = (s) => s
+  .replace(/<mention\b[^>]*url="([^\"]+)"[^>]*(?:\/>|>[\s\S]*?<\/mention>)/g, (m,u) => `[LINK:${pid(u)}]`)
+  .replace(/<page\b[^>]*\burl="([^"]+)"[^>]*>[\s\S]*?<\/page>/g, (m,u) => `[LINK:${pid(u)}]`)
   .replace(/<mention-page url="([^"]+)"\s*\/>/g, (m, u) => `[LINK:${pid(u)}]`)
   .replace(/<mention-page url="([^"]+)">[\s\S]*?<\/mention-page>/g, (m, u) => `[LINK:${pid(u)}]`)
   .replace(/\[[^\]]*\]\(([^)]+)\)/g, (m, u) => `[LINK:${pid(u)}]`)
@@ -78,63 +83,24 @@ const verNum = (r) => { const m = cellsOf(r)[0]?.match(/^第\s*(\d+)\s*版$/); r
 const rowsEqual = (a, b) => canon(a) === canon(b)
 const withRows = (md, t, rows) => md.slice(0, t.start) + md.slice(t.start, md.indexOf('>', t.start) + 1) + '\n' + rows.join('\n') + '\n' + md.slice(t.end)
 
-// 顶部例行时间：只认页面开头的时间字段，不屏蔽正文中的业务日期。
-const TOP_TIME = /^(\s*(?:(?:<[^>\n]+>|[*_])\s*)*(?:(?:更新时间|操作时间|修改时间|最后更新|最近更新|时间)\s*[:：]\s*)?)(20\d{2}[\/-]\d{1,2}[\/-]\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?)/
-const topTimeValue = (md) => { const t = parseTable(md); return (t ? md.slice(0, t.start) : md).match(TOP_TIME)?.[2] || null }
-export function refreshTopTime(md, now) {
-  const t = parseTable(md), n = t ? t.start : md.length
-  return md.slice(0, n).replace(TOP_TIME, (all, prefix) => prefix + now) + md.slice(n)
-}
-
-// 按二级标题比较上一版副本和当前文档，得出影响位置。
-// 只在正文完全相同且两边唯一时认定纯改名；不按相似度猜测。
+// 按二级标题比较上一版副本和当前文档，得出影响位置
 export function changedPlaces(prevMd, curMd) {
   const split = (md) => {
     const t = parseTable(md)
-    const content = (t ? md.slice(0, t.start) + '\n' + md.slice(t.end + '</table>'.length) : md)
-      .replace(TOP_TIME, (all, prefix) => prefix + '[例行时间]')
-      .replace(/^##[ \t]+版本管理表[ \t]*$/gm, '')
-    const intro = [], secs = []
-    let current = null, fence = null
-    for (const line of content.split('\n')) {
-      const f = line.match(/^\s*(`{3,}|~{3,})/)
-      if (fence) {
-        if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null
-      } else if (f) fence = f[1]
-      else {
-        const h = line.match(/^##[ \t]+(.+?)[ \t]*$/)
-        if (h) { current = { title: h[1].trim(), lines: [] }; secs.push(current); continue }
-      }
-      ;(current ? current.lines : intro).push(line)
+    const top = t ? md.slice(0, t.start) : ''
+    const rest = t ? md.slice(t.end) : md
+    const secs = new Map()
+    for (const part of rest.split(/^(?=## )/m)) {
+      const h = part.match(/^## (.+)$/m)
+      if (h && part.startsWith('## ')) secs.set(h[1].trim(), canon(part))
     }
-    return { intro: canon(intro.join('\n')), secs: secs.map((x) => ({ title: x.title, body: canon(x.lines.join('\n')) })) }
+    return { top: canon(top.replace(/^## .*$/gm, '')), secs }
   }
-  const p = split(prevMd), c = split(curMd), out = [], used = new Set(), pairs = []
-  if (p.intro !== c.intro) out.push('文档引言')
-  const label = (arr, i) => arr.filter((x) => x.title === arr[i].title).length > 1
-    ? `${arr[i].title}（第${arr.slice(0, i + 1).filter((x) => x.title === arr[i].title).length}处）` : arr[i].title
-  const missing = []
-  for (let i = 0; i < c.secs.length; i++) {
-    const cur = c.secs[i]
-    let j = p.secs.findIndex((old, k) => !used.has(k) && old.title === cur.title && old.body === cur.body)
-    if (j < 0) j = p.secs.findIndex((old, k) => !used.has(k) && old.title === cur.title)
-    if (j < 0) { missing.push(i); continue }
-    used.add(j); pairs.push([i, j])
-    if (p.secs[j].body !== cur.body) out.push(label(c.secs, i))
-  }
-  for (const i of missing) {
-    const cur = c.secs[i]
-    const matches = p.secs.map((old, j) => ({ old, j })).filter(({ old, j }) => !used.has(j) && old.body === cur.body)
-    const unique = cur.body && matches.length === 1
-      && p.secs.filter((x) => x.body === cur.body).length === 1 && c.secs.filter((x) => x.body === cur.body).length === 1
-    if (unique) {
-      const j = matches[0].j; used.add(j); pairs.push([i, j])
-      out.push(`章节改名：${p.secs[j].title} → ${cur.title}`)
-    } else out.push('新增：' + label(c.secs, i))
-  }
-  for (let j = 0; j < p.secs.length; j++) if (!used.has(j)) out.push('删除：' + label(p.secs, j))
-  const order = pairs.sort((a, b) => a[0] - b[0]).map((x) => x[1])
-  if (order.some((j, i) => i > 0 && j < order[i - 1])) out.push('章节顺序')
+  const p = split(prevMd), c = split(curMd)
+  const out = []
+  if (p.top !== c.top) out.push('顶部时间')
+  for (const [h, v] of c.secs) if (h !== '版本管理表' && p.secs.get(h) !== v) out.push(h)
+  for (const h of p.secs.keys()) if (!c.secs.has(h)) out.push('删除：' + h)
   out.push('版本管理表')
   return out.join('；')
 }
@@ -171,7 +137,19 @@ export async function run(input, io, logger = console.log) {
     if (!st.md1 || !st.t1) return result // 版本管理表无法写入：只输出执行结果
     const link = st.copyId ? `<mention-page url="https://www.notion.so/${st.copyId}"/>` : '无'
     const ex = makeRow(['异常', now, esc(who || '执行器'), esc('失败步骤：' + st.step + '。' + problem), esc('已完成：' + (st.done.join('；') || '无')), esc('待处理：' + problem), link])
-    const target = withRows(st.md1, st.t1, [...st.t1.rows, ex]) // 旧行恢复为读取时的原文，末尾加异常行
+    if (problem.includes('执行中文档发生变化') || problem.includes('业务正文发生变化')) {
+      result.problem += '；为避免覆盖并发修改，本次未写异常行，请人工核对后处理'
+      return result
+    }
+    let current
+    try { current = await io.getMd(doc) } catch (e) { result.problem += '；异常记录前无法重新读取文档：' + e.message; return result }
+    const currentTable = typeof current === 'string' ? parseTable(current) : null
+    if (!currentTable) { result.problem += '；当前版本表不可核对，未写异常行'; return result }
+    const currentOutside = current.slice(0,currentTable.start) + current.slice(currentTable.end)
+    const oldOutside = st.md1.slice(0,st.t1.start) + st.md1.slice(st.t1.end)
+    if (sha(currentOutside) !== sha(oldOutside)) { result.problem += '；发现并发正文修改，未覆盖原文'; return result }
+    if (currentTable.rows.length > st.t1.rows.length + 1) { result.problem += '；出现其他新记录，未覆盖版本表'; return result }
+    const target = withRows(current, currentTable, [...st.t1.rows, ex])
     try {
       await retry('写入异常行', async () => {
         await io.putMd(doc, target)
@@ -198,7 +176,6 @@ export async function run(input, io, logger = console.log) {
     if (!t1 || !t1.rows.length) throw new StopError('找不到版本管理表')
     const header = cellsOf(t1.rows[0])
     if (header.join('|') !== COLS.join('|')) throw new StopError('找不到版本管理表（表头不是规定的七列）')
-    if (/^<page url=/m.test(md1)) throw new StopError('文档下面挂着子页面，副本无法与文档一致；请先把子页面移到存档页')
     st.md1 = md1; st.t1 = t1
     st.done.push('已读取版本管理表')
     if (noteMissing) { st.step = '第1步 核对输入'; return await fail('缺少本次操作说明') }
@@ -216,7 +193,11 @@ export async function run(input, io, logger = console.log) {
     // 4. 建立空副本页
     st.step = '第4步 建立空副本页'
     const copyTitle = `第${N}版副本｜${title}`
-    st.copyId = await retry('建立副本页', () => io.createPage(archive, copyTitle))
+    // 建页超时可能已建立页面，不能盲目重复创建另一份副本。
+    st.copyId = await io.createPage(archive, copyTitle)
+    if (!st.copyId) throw new StopError('未取得副本链接，建立结果不明确，停止，不盲目重建')
+    if (typeof io.getParent !== 'function') throw new StopError('读写接口缺少副本父页面核对能力')
+    if ((await retry('核对副本位置', () => io.getParent(st.copyId))) !== archive) throw new StopError('副本没有建在指定版本副本存档父页面下')
     await retry('核对副本标题', async () => {
       const got = await io.getTitle(st.copyId)
       if (got !== copyTitle) { await io.setTitle(st.copyId, copyTitle); throw new Error(`标题为“${got}”，已改为“${copyTitle}”，待复查`) }
@@ -228,17 +209,22 @@ export async function run(input, io, logger = console.log) {
     if (prevIdx > 0) {
       const prevLink = cellsOf(t1.rows[prevIdx])[6] || ''
       const u = prevLink.match(/url="([^"]+)"|\(([^)]+)\)/)?.slice(1).find(Boolean)
-      if (u) { try { where = changedPlaces(await io.getMd(pid(u)), md1) } catch { where = '全文' } }
+      if (!u) throw new StopError('上一成立版本缺少可读副本链接，不能猜测影响位置')
+      const previous = await retry('读取上一版副本', () => io.getMd(pid(u)))
+      if (typeof previous !== 'string') throw new StopError('上一版副本不可核对，不能猜测影响位置')
+      where = changedPlaces(previous, md1)
     }
 
     // 5. 写入版本记录
     st.step = '第5步 写入版本记录'
     const newRow = makeRow([`第 ${N} 版`, now, esc(who || '未填写'), esc(note), esc(where), '', `<mention-page url="https://www.notion.so/${st.copyId}"/>`])
     const expRows = t1.rows.map((r, i) => (i === prevIdx ? makeRow(cellsOf(r).map((c, k) => (k === 5 ? esc(note) : c))) : r))
-    const target = refreshTopTime(withRows(md1, t1, [...expRows, newRow]), now)
+    const target = withRows(md1, t1, [...expRows, newRow])
     let md3
     await retry('写入并核对版本记录', async (i) => {
       const cur = await io.getMd(doc)
+      const outside = (md) => { const t = parseTable(md); return t ? canon(md.slice(0,t.start) + md.slice(t.end)) : null }
+      if (outside(cur) !== outside(md1)) throw new StopError('执行中文档发生变化')
       if (i === 1 && sha(cur) !== sha(md1)) throw new StopError('执行中文档发生变化')
       const curT = parseTable(cur)
       const already = curT && curT.rows.length === expRows.length + 1 && sha(cur) === sha(target)
@@ -263,8 +249,11 @@ export async function run(input, io, logger = console.log) {
       if (canon(c[3]) !== canon(esc(note))) throw new Error('新行操作说明不对')
       if (c[5] !== '') throw new Error('新行下一版操作说明不为空')
       if (!c[6] || pid(c[6].match(/url="([^"]+)"|\(([^)]+)\)/)?.slice(1).find(Boolean) || '') !== st.copyId) throw new Error('新行副本链接不对')
-      if (!c[1] || !c[2] || !c[4]) throw new Error('新行有空格')
-      if (topTimeValue(back) !== topTimeValue(target)) throw new Error('顶部时间未按本次操作时间更新')
+      if (c[1] !== now) throw new Error('新行时间不对')
+      if (c[2] !== esc(who || '未填写')) throw new Error('新行操作人不对')
+      if (canon(c[4]) !== canon(esc(where))) throw new Error('新行影响位置不对')
+      const outsideTable = (md) => { const t = parseTable(md); return t ? md.slice(0,t.start) + md.slice(t.end) : null }
+      if (sha(outsideTable(back)) !== sha(outsideTable(md1))) throw new StopError('版本记录写入时业务正文发生变化')
       md3 = back
     })
     st.done.push(`已写入第${N}版版本记录`)
@@ -275,7 +264,7 @@ export async function run(input, io, logger = console.log) {
     await retry('写入并比对副本', async (i) => {
       if (sha(await io.getMd(doc)) !== sha(md3)) throw new StopError('执行中文档发生变化')
       if (i > 1) await io.putMd(st.copyId, '') // 清空副本后完整重写
-      await io.putMd(st.copyId, md3)
+      await io.putMd(st.copyId, snapshotContent(md3))
       const back = await readBack(io, st.copyId, '副本')
       hDoc = sha(md3); hCopy = sha(back)
       if (hDoc !== hCopy) throw new Error(`副本与文档不一致（${hDoc.slice(0, 8)} / ${hCopy.slice(0, 8)}）`)

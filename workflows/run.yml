@@ -1,0 +1,38 @@
+name: 正式运行：版本管理
+on:
+  workflow_dispatch:
+    inputs:
+      doc:
+        description: '要做版本管理的文档ID'
+        required: true
+      archive:
+        description: '版本副本存档父页面ID，不是业务文档或空副本'
+        required: true
+      note:
+        description: '修改前已由人类确认的本次操作说明'
+        required: true
+      who:
+        description: '本次操作人'
+        required: true
+        default: AI
+permissions:
+  contents: read
+concurrency:
+  group: version-management-${{ inputs.doc }}
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: 运行指定代码版本
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DOC: ${{ inputs.doc }}
+          ARCHIVE: ${{ inputs.archive }}
+          NOTE: ${{ inputs.note }}
+          WHO: ${{ inputs.who }}
+        run: node executor.mjs --doc "$DOC" --archive "$ARCHIVE" --note "$NOTE" --who "$WHO"
